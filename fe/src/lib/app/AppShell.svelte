@@ -23,6 +23,11 @@
 	let requestedPermission = $derived(routePermission(requestedRoute));
 	let routeAllowed = $derived(!requestedPermission || authStore.can(requestedPermission));
 	let route = $derived(routeAllowed ? requestedRoute : parseRoute('/memorial'));
+	let memorialMounted = $state(false);
+	let structureMounted = $state(false);
+	let statisticsMounted = $state(false);
+	let usersMounted = $state(false);
+	let profileMounted = $state(false);
 
 	onMount(async () => {
 		router.init();
@@ -33,6 +38,34 @@
 
 	$effect(() => {
 		if (authStore.user && !routeAllowed) router.replace('/memorial');
+	});
+
+	$effect(() => {
+		if (!authStore.user) {
+			memorialMounted = false;
+			structureMounted = false;
+			statisticsMounted = false;
+			usersMounted = false;
+			profileMounted = false;
+			return;
+		}
+		switch (route.name) {
+			case 'memorial':
+				memorialMounted = true;
+				break;
+			case 'structure':
+				structureMounted = true;
+				break;
+			case 'statistics':
+				statisticsMounted = true;
+				break;
+			case 'users':
+				usersMounted = true;
+				break;
+			case 'profile':
+				profileMounted = true;
+				break;
+		}
 	});
 </script>
 
@@ -50,17 +83,21 @@
 		<div class="flex min-w-0 flex-1 flex-col">
 			<TopBar {route} />
 			<section class="relative min-h-0 flex-1 overflow-hidden">
-				{#if route.name === 'memorial'}
-					<MemorialScreen />
-				{:else if route.name === 'structure'}
-					<StructureScreen />
-				{:else if route.name === 'statistics'}
-					<StatisticsScreen />
-				{:else if route.name === 'users'}
-					<UsersScreen />
-				{:else if route.name === 'profile'}
-					<ProfileScreen />
-				{/if}
+				{#if memorialMounted}<div class="h-full" class:hidden={route.name !== 'memorial'}>
+						<MemorialScreen />
+					</div>{/if}
+				{#if structureMounted}<div class="h-full" class:hidden={route.name !== 'structure'}>
+						<StructureScreen />
+					</div>{/if}
+				{#if statisticsMounted}<div class="h-full" class:hidden={route.name !== 'statistics'}>
+						<StatisticsScreen />
+					</div>{/if}
+				{#if usersMounted}<div class="h-full" class:hidden={route.name !== 'users'}>
+						<UsersScreen />
+					</div>{/if}
+				{#if profileMounted}<div class="h-full" class:hidden={route.name !== 'profile'}>
+						<ProfileScreen />
+					</div>{/if}
 			</section>
 			<BottomNav {route} />
 		</div>

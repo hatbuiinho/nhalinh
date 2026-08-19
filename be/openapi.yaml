@@ -24,11 +24,16 @@ paths:
       responses: { "200": { description: Thông tin tài khoản } }
   /api/users:
     get:
-      summary: Danh sách tài khoản
+      summary: Danh sách tài khoản cùng role và phạm vi Nhà Linh
       responses: { "200": { description: Danh sách tài khoản } }
     post:
-      summary: Tạo tài khoản
+      summary: Tạo tài khoản admin, editor hoặc viewer cùng phạm vi Nhà Linh
       responses: { "201": { description: Tài khoản đã tạo } }
+  /api/users/{id}:
+    put:
+      summary: Cập nhật tài khoản, role và phạm vi Nhà Linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Tài khoản đã cập nhật } }
   /api/spirit-houses:
     get:
       summary: Danh sách Nhà Linh được truy cập
@@ -45,11 +50,6 @@ paths:
       summary: Xoá Nhà Linh
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { "204": { description: Đã xoá } }
-  /api/spirit-houses/{id}/members:
-    post:
-      summary: Cấp quyền manager, editor hoặc viewer tại Nhà Linh
-      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
-      responses: { "200": { description: Đã cập nhật quyền } }
   /api/memorial-areas:
     get:
       summary: Danh sách khu vực theo Nhà Linh
@@ -62,7 +62,7 @@ paths:
       summary: Danh sách bài vị theo vị trí
       responses: { "200": { description: Danh sách bài vị } }
     post:
-      summary: Tạo bài vị cùng 1-500 Hương linh trong một transaction
+      summary: Tạo bài vị, gắn Hương linh chưa xếp và thêm Hương linh mới (tổng 1-500) trong một transaction
       responses: { "201": { description: Bài vị đã tạo } }
   /api/memorial-tablets/{id}:
     put:
@@ -92,7 +92,7 @@ paths:
       responses: { "200": { description: Dữ liệu tổng hợp cho sơ đồ phân bổ } }
   /api/spirits:
     get:
-      summary: Tìm Hương linh không dấu; mã vị trí có thể nhập không có dấu gạch ngang
+      summary: Tìm Hương linh không dấu; hỗ trợ lọc Hương linh chưa xếp bằng unplaced=true
       responses: { "200": { description: Danh sách Hương linh } }
     post:
       summary: Thêm Hương linh vào bài vị hoặc lưu chưa xếp vị trí bằng house_id

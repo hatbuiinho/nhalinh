@@ -11,15 +11,9 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	ctx := context.Background()
 	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC) })
 	admin := Actor{ID: "admin", Role: "admin"}
-	viewer := Actor{ID: "viewer", Role: "viewer"}
+	viewer := Actor{ID: "viewer", Role: "viewer", AllHouses: true}
 	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh 1"})
 	if err != nil {
-		t.Fatal(err)
-	}
-	if _, err = service.ListAreas(ctx, viewer, house.ID); !errors.Is(err, ErrForbidden) {
-		t.Fatalf("expected forbidden before assignment, got %v", err)
-	}
-	if err = service.SetMember(ctx, admin, house.ID, viewer.ID, "viewer"); err != nil {
 		t.Fatal(err)
 	}
 	area, err := service.CreateArea(ctx, admin, AreaInput{HouseID: house.ID, Code: "a"})
@@ -139,5 +133,87 @@ func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
 	positions, err := service.ListPositions(ctx, admin, area.ID)
 	if err != nil || len(positions) != 3 {
 		t.Fatalf("unexpected positions after skipped duplicates: items=%d err=%v", len(positions), err)
+	}
+}
+
+func TestCreateTabletAttachesExistingUnplacedSpiritsAtomically(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC) })
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh gắn nhanh"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	area, err := service.CreateArea(ctx, admin, AreaInput{HouseID: house.ID, Code: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPosition, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPosition, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 1, ColumnNumber: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	unplaced, err := service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "Nguyễn Văn Chưa Xếp"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	matches, total, err := service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, Query: "chua xep", Unplaced: true, Limit: 20})
+	if err != nil || total != 1 || len(matches) != 1 || matches[0].ID != unplaced.ID {
+		t.Fatalf("unexpected unplaced search: total=%d items=%#v err=%v", total, matches, err)
+	}
+	tablet, err := service.CreateTablet(ctx, admin, TabletInput{
+		PositionID:        firstPosition.ID,
+		Name:              "Bài vị kết hợp",
+		ExistingSpiritIDs: []string{unplaced.ID},
+		Spirits:           []SpiritInput{{FullName: "Hương linh nhập mới"}},
+	})
+	if err != nil || tablet.SpiritCount != 2 {
+		t.Fatalf("unexpected combined tablet: %#v err=%v", tablet, err)
+	}
+	attached, total, err := service.ListSpirits(ctx, admin, SearchOptions{TabletID: tablet.ID, Limit: 20})
+	if err != nil || total != 2 || len(attached) != 2 {
+		t.Fatalf("unexpected attached spirits: total=%d items=%#v err=%v", total, attached, err)
+	}
+	if _, err = service.CreateTablet(ctx, admin, TabletInput{PositionID: secondPosition.ID, Name: "Không được tạo", ExistingSpiritIDs: []string{unplaced.ID}}); !errors.Is(err, ErrConflict) {
+		t.Fatalf("already attached spirit should conflict, got %v", err)
+	}
+	tablets, err := service.ListTablets(ctx, admin, secondPosition.ID)
+	if err != nil || len(tablets) != 0 {
+		t.Fatalf("conflicted transaction must not create tablet: %#v err=%v", tablets, err)
+	}
+}
+
+func TestEditorAndViewerRespectHouseScope(t *testing.T) {
+	ctx := context.Background()
+	store := NewMemoryStore()
+	service := NewService(store, time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	houseA, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	houseB, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	store.members[houseA.ID] = map[string]bool{"editor": true, "viewer": true}
+
+	editor := Actor{ID: "editor", Role: "editor"}
+	if _, err = service.CreateArea(ctx, editor, AreaInput{HouseID: houseA.ID, Code: "A"}); err != nil {
+		t.Fatalf("editor should write assigned house: %v", err)
+	}
+	if _, err = service.CreateArea(ctx, editor, AreaInput{HouseID: houseB.ID, Code: "B"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("editor should not access unassigned house: %v", err)
+	}
+
+	viewer := Actor{ID: "viewer", Role: "viewer"}
+	if _, err = service.ListAreas(ctx, viewer, houseA.ID); err != nil {
+		t.Fatalf("viewer should read assigned house: %v", err)
+	}
+	if _, err = service.CreateArea(ctx, viewer, AreaInput{HouseID: houseA.ID, Code: "C"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("viewer write should be forbidden: %v", err)
 	}
 }

@@ -22,7 +22,7 @@ type Store interface {
 	UpdatePosition(context.Context, Position) (Position, error)
 	ListTablets(context.Context, Actor, string) ([]Tablet, error)
 	CreateTablet(context.Context, Tablet) (Tablet, error)
-	CreateTabletWithSpirits(context.Context, Tablet, []Spirit) (Tablet, error)
+	CreateTabletWithSpirits(context.Context, Tablet, []Spirit, []string, string) (Tablet, error)
 	UpdateTabletWithSpirits(context.Context, Tablet, []Spirit) (Tablet, error)
 	ListSpirits(context.Context, Actor, SearchOptions) ([]Spirit, int, error)
 	GetSpirit(context.Context, Actor, string) (Spirit, error)

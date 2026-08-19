@@ -192,6 +192,7 @@ export const createTablet = (input: {
 	name: string;
 	notes: string;
 	spirits: InlineSpiritInput[];
+	existing_spirit_ids?: string[];
 }) => apiRequest<Tablet>('/api/memorial-tablets', { method: 'POST', body: JSON.stringify(input) });
 export const updateTablet = (
 	id: string,
@@ -227,6 +228,20 @@ export async function listSpirits(
 		offset: String(offset)
 	});
 	return apiRequest<{ spirits: Spirit[]; total: number; has_more: boolean }>(`/api/spirits?${p}`);
+}
+export async function searchUnplacedSpirits(houseId: string, query: string, limit = 20) {
+	const params = new URLSearchParams({
+		house_id: houseId,
+		q: query,
+		unplaced: 'true',
+		limit: String(limit),
+		offset: '0'
+	});
+	return (
+		await apiRequest<{ spirits: Spirit[]; total: number; has_more: boolean }>(
+			`/api/spirits?${params}`
+		)
+	).spirits;
 }
 export const createSpirit = (input: SpiritInput) =>
 	apiRequest<Spirit>('/api/spirits', { method: 'POST', body: JSON.stringify(input) });

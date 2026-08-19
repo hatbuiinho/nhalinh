@@ -42,7 +42,7 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<div class="shrink-0 border-b border-[var(--color-border)] pb-3">
-		<div class="flex items-end gap-2">
+		<div class="flex items-center gap-2">
 			<label class="min-w-0 flex-1"
 				><span class="mb-1 block text-xs font-medium">Dán từ Excel / Google Sheets</span><textarea
 					bind:value={sheetPaste}

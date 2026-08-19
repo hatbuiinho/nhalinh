@@ -16,7 +16,7 @@ func TestCreateAndLogin(t *testing.T) {
 	if err != nil {
 		t.Fatalf("create user: %v", err)
 	}
-	if created.Role != RoleViewer || !HasPermission(created.Role, PermissionMemorialRead) || !HasPermission(created.Role, PermissionUserRead) || HasPermission(created.Role, PermissionUserManage) {
+	if created.Role != RoleViewer || !created.AllHouses || !HasPermission(created.Role, PermissionMemorialRead) || HasPermission(created.Role, PermissionUserRead) || HasPermission(created.Role, PermissionUserManage) {
 		t.Fatalf("unexpected default viewer permissions: %#v", created)
 	}
 	result, err := service.Login(context.Background(), "ADMIN", "password123")
@@ -46,6 +46,20 @@ func TestCreateAdminReturnsAdminPermissions(t *testing.T) {
 		Username: "invalid", DisplayName: "Invalid", Password: "password123", Role: "owner",
 	}); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("expected invalid role error, got %v", err)
+	}
+}
+
+func TestEditorKeepsSelectedHouseScope(t *testing.T) {
+	service := NewService(NewMemoryStore(), time.Now)
+	created, err := service.Create(context.Background(), CreateInput{
+		Username: "editor", DisplayName: "Biên tập viên", Password: "password123",
+		Role: RoleEditor, HouseIDs: []string{"house-b", "house-a", "house-a"},
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if created.AllHouses || len(created.HouseIDs) != 2 || !HasPermission(created.Role, PermissionMemorialManage) || HasPermission(created.Role, PermissionUserRead) {
+		t.Fatalf("unexpected editor scope or permissions: %#v", created)
 	}
 }
 

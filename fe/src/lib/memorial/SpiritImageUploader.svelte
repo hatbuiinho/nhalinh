@@ -7,12 +7,14 @@
 		displayName,
 		uploading = false,
 		compact = false,
+		readOnly = false,
 		onselect
 	}: {
 		imageUrl?: string;
 		displayName: string;
 		uploading?: boolean;
 		compact?: boolean;
+		readOnly?: boolean;
 		onselect: (file: File) => void | Promise<void>;
 	} = $props();
 	let input = $state<HTMLInputElement>(),
@@ -59,23 +61,23 @@
 				><span class="icon-[lucide--loader-circle] h-6 w-6 animate-spin"></span></span
 			>{/if}</button
 	>
-	<div class={compact ? 'shrink-0' : ''}>
-		{#if !compact}<p class="text-sm font-semibold">Ảnh Hương linh</p>
-			<p class="mt-1 text-sm text-[var(--color-text-secondary)]">
-				Ảnh được cắt theo tỉ lệ chân dung 3:4.
-			</p>{/if}
-		<button
-			type="button"
-			disabled={uploading}
-			onclick={() => input?.click()}
-			class={[
-				'rounded-md border border-[var(--color-primary)] font-semibold text-[var(--color-primary-dark)] disabled:opacity-50',
-				compact ? 'h-8 px-2 text-xs' : 'mt-3 h-10 px-3 text-sm'
-			]}
-			><span class="mr-1 icon-[lucide--image-up] inline-block h-4 w-4 align-text-bottom"
-			></span>{compact ? 'Ảnh' : 'Chọn ảnh'}</button
-		>
-	</div>
+	{#if !readOnly}<div class={compact ? 'shrink-0' : ''}>
+			{#if !compact}<p class="text-sm font-semibold">Ảnh Hương linh</p>
+				<p class="mt-1 text-sm text-[var(--color-text-secondary)]">
+					Ảnh được cắt theo tỉ lệ chân dung 3:4.
+				</p>{/if}
+			<button
+				type="button"
+				disabled={uploading}
+				onclick={() => input?.click()}
+				class={[
+					'rounded-md border border-[var(--color-primary)] font-semibold text-[var(--color-primary-dark)] disabled:opacity-50',
+					compact ? 'h-8 px-2 text-xs' : 'mt-3 h-10 px-3 text-sm'
+				]}
+				><span class="mr-1 icon-[lucide--image-up] inline-block h-4 w-4 align-text-bottom"
+				></span>{compact ? 'Ảnh' : 'Chọn ảnh'}</button
+			>
+		</div>{/if}
 	<input
 		bind:this={input}
 		type="file"

@@ -44,8 +44,8 @@ type CreateInput struct {
 	DisplayName string
 	Password    string
 	Role        string
-	AllHouses  bool
-	HouseIDs   []string
+	AllHouses   bool
+	HouseIDs    []string
 }
 
 type UpdateInput struct {
@@ -53,8 +53,8 @@ type UpdateInput struct {
 	DisplayName string
 	Role        string
 	Password    string
-	AllHouses  bool
-	HouseIDs   []string
+	AllHouses   bool
+	HouseIDs    []string
 }
 
 func PermissionsForRole(role string) []Permission {

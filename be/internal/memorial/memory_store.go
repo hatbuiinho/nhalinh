@@ -15,7 +15,7 @@ import (
 type MemoryStore struct {
 	mu        sync.RWMutex
 	houses    map[string]House
-	members   map[string]map[string]string
+	members   map[string]map[string]bool
 	areas     map[string]Area
 	positions map[string]Position
 	tablets   map[string]Tablet
@@ -23,7 +23,7 @@ type MemoryStore struct {
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{houses: map[string]House{}, members: map[string]map[string]string{}, areas: map[string]Area{}, positions: map[string]Position{}, tablets: map[string]Tablet{}, spirits: map[string]Spirit{}}
+	return &MemoryStore{houses: map[string]House{}, members: map[string]map[string]bool{}, areas: map[string]Area{}, positions: map[string]Position{}, tablets: map[string]Tablet{}, spirits: map[string]Spirit{}}
 }
 func (s *MemoryStore) ListHouses(_ context.Context, a Actor) ([]House, error) {
 	s.mu.RLock()
@@ -32,7 +32,7 @@ func (s *MemoryStore) ListHouses(_ context.Context, a Actor) ([]House, error) {
 	for _, v := range s.houses {
 		r := a.Role
 		if a.Role != "admin" && !a.AllHouses {
-			if s.members[v.ID][a.ID] == "" {
+			if !s.members[v.ID][a.ID] {
 				continue
 			}
 		}
@@ -77,8 +77,7 @@ func (s *MemoryStore) AccessRole(_ context.Context, a Actor, h string) (string, 
 	if a.Role == "admin" || a.AllHouses {
 		return a.Role, nil
 	}
-	r := s.members[h][a.ID]
-	if r == "" {
+	if !s.members[h][a.ID] {
 		return "", ErrForbidden
 	}
 	return a.Role, nil
@@ -339,7 +338,7 @@ func (s *MemoryStore) CreateTablet(_ context.Context, v Tablet) (Tablet, error) 
 	s.tablets[v.ID] = v
 	return v, nil
 }
-func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spirits []Spirit) (Tablet, error) {
+func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spirits []Spirit, existingSpiritIDs []string, houseID string) (Tablet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	for _, x := range s.tablets {
@@ -347,11 +346,23 @@ func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spiri
 			return Tablet{}, ErrConflict
 		}
 	}
+	for _, id := range existingSpiritIDs {
+		spirit, ok := s.spirits[id]
+		if !ok || spirit.HouseID != houseID || spirit.TabletID != "" {
+			return Tablet{}, fmt.Errorf("%w: one or more spirits are no longer unplaced", ErrConflict)
+		}
+	}
 	s.tablets[v.ID] = v
+	for _, id := range existingSpiritIDs {
+		spirit := s.spirits[id]
+		spirit.TabletID = v.ID
+		spirit.UpdatedAt = v.UpdatedAt
+		s.spirits[id] = spirit
+	}
 	for _, spirit := range spirits {
 		s.spirits[spirit.ID] = spirit
 	}
-	v.SpiritCount = len(spirits)
+	v.SpiritCount = len(spirits) + len(existingSpiritIDs)
 	return v, nil
 }
 func (s *MemoryStore) UpdateTabletWithSpirits(_ context.Context, v Tablet, spirits []Spirit) (Tablet, error) {
@@ -398,10 +409,13 @@ func (s *MemoryStore) ListSpirits(_ context.Context, a Actor, o SearchOptions) (
 	q := fold(o.Query)
 	for _, v := range s.spirits {
 		v = s.join(v)
-		if a.Role != "admin" && !a.AllHouses && s.members[v.HouseID][a.ID] == "" {
+		if a.Role != "admin" && !a.AllHouses && !s.members[v.HouseID][a.ID] {
 			continue
 		}
 		if o.HouseID != "" && v.HouseID != o.HouseID || o.AreaID != "" && v.AreaID != o.AreaID || o.PositionID != "" && v.PositionID != o.PositionID || o.TabletID != "" && v.TabletID != o.TabletID {
+			continue
+		}
+		if o.Unplaced && v.TabletID != "" {
 			continue
 		}
 		hay := fold(strings.Join([]string{v.FullName, v.DharmaName, v.BirthYear, v.DeathYear, v.Age, v.BurialPlace, v.Sender, v.SentMonth, v.Notes, v.PositionName, v.TabletName, v.AreaCode, v.HouseName}, " "))
@@ -424,7 +438,7 @@ func (s *MemoryStore) GetSpirit(_ context.Context, a Actor, id string) (Spirit, 
 		return Spirit{}, ErrNotFound
 	}
 	v = s.join(v)
-	if a.Role != "admin" && !a.AllHouses && s.members[v.HouseID][a.ID] == "" {
+	if a.Role != "admin" && !a.AllHouses && !s.members[v.HouseID][a.ID] {
 		return Spirit{}, ErrForbidden
 	}
 	return v, nil

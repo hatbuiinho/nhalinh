@@ -131,11 +131,13 @@ type PositionInput struct {
 type TabletInput struct {
 	PositionID, Name, Notes string
 	Spirits                 []SpiritInput
+	ExistingSpiritIDs       []string
 }
 type SpiritInput struct{ ID, HouseID, TabletID, FullName, DharmaName, BirthYear, DeathYear, Age, ImageURL, BurialPlace, Sender, SentMonth, Notes string }
 type SearchOptions struct {
 	Query, HouseID, AreaID, PositionID, TabletID string
 	Limit, Offset                                int
+	Unplaced                                     bool
 }
 type PositionSearchOptions struct {
 	HouseID, Query string

@@ -235,7 +235,7 @@ func (s *PostgresStore) CreateTablet(ctx context.Context, v Tablet) (Tablet, err
 	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,position_id,name,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
-func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, spirits []Spirit) (Tablet, error) {
+func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, spirits []Spirit, existingSpiritIDs []string, houseID string) (Tablet, error) {
 	tx, err := s.pool.Begin(ctx)
 	if err != nil {
 		return Tablet{}, fmt.Errorf("begin create tablet: %w", err)
@@ -244,8 +244,23 @@ func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, s
 	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,position_id,name,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
-	for _, spirit := range spirits {
-		_, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,birth_year,death_year,age,image_url,burial_place,sender,sent_month,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,$14,$15)`, spirit.ID, spirit.HouseID, v.ID, spirit.FullName, spirit.DharmaName, spirit.BirthYear, spirit.DeathYear, spirit.Age, spirit.ImageURL, spirit.BurialPlace, spirit.Sender, spirit.SentMonth, spirit.Notes, spirit.CreatedAt, spirit.UpdatedAt)
+	if len(existingSpiritIDs) > 0 {
+		result, updateErr := tx.Exec(ctx, `UPDATE spirits SET tablet_id=$1,updated_at=$2 WHERE house_id=$3 AND tablet_id IS NULL AND id=ANY($4::text[])`, v.ID, v.UpdatedAt, houseID, existingSpiritIDs)
+		if updateErr != nil {
+			return Tablet{}, mapErr(updateErr)
+		}
+		if result.RowsAffected() != int64(len(existingSpiritIDs)) {
+			return Tablet{}, fmt.Errorf("%w: one or more spirits are no longer unplaced", ErrConflict)
+		}
+	}
+	if len(spirits) > 0 {
+		data, marshalErr := json.Marshal(spirits)
+		if marshalErr != nil {
+			return Tablet{}, fmt.Errorf("encode spirits: %w", marshalErr)
+		}
+		_, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,birth_year,death_year,age,image_url,burial_place,sender,sent_month,notes,created_at,updated_at)
+			SELECT x.id,x.house_id,$1,x.full_name,x.dharma_name,x.birth_year,x.death_year,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.created_at,x.updated_at
+			FROM jsonb_to_recordset($2::jsonb) AS x(id text,house_id text,full_name text,dharma_name text,birth_year text,death_year text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,created_at timestamptz,updated_at timestamptz)`, v.ID, string(data))
 		if err != nil {
 			return Tablet{}, mapErr(err)
 		}
@@ -253,7 +268,7 @@ func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, s
 	if err = tx.Commit(ctx); err != nil {
 		return Tablet{}, fmt.Errorf("commit create tablet: %w", err)
 	}
-	v.SpiritCount = len(spirits)
+	v.SpiritCount = len(spirits) + len(existingSpiritIDs)
 	return v, nil
 }
 func (s *PostgresStore) UpdateTabletWithSpirits(ctx context.Context, v Tablet, spirits []Spirit) (Tablet, error) {
@@ -307,13 +322,13 @@ const spiritCols = `s.id,COALESCE(s.tablet_id,''),h.id,h.name,COALESCE(a.id,''),
 
 func (s *PostgresStore) ListSpirits(ctx context.Context, a Actor, o SearchOptions) ([]Spirit, int, error) {
 	access := "($1='admin' OR $3 OR EXISTS(SELECT 1 FROM spirit_house_members hm WHERE hm.house_id=h.id AND hm.user_id=$2))"
-	filter := access + ` AND ($4='' OR h.id=$4) AND ($5='' OR a.id=$5) AND ($6='' OR p.id=$6) AND ($7='' OR t.id=$7) AND ($8='' OR replace(unaccent(lower(concat_ws(' ',s.full_name,s.dharma_name,s.birth_year,s.death_year,s.age,s.burial_place,s.sender,s.sent_month,s.notes,p.name,t.name,a.code,h.name))),'-','') LIKE '%'||replace(unaccent(lower($8)),'-','')||'%')`
-	args := []any{a.Role, a.ID, a.AllHouses, o.HouseID, o.AreaID, o.PositionID, o.TabletID, o.Query}
+	filter := access + ` AND ($4='' OR h.id=$4) AND ($5='' OR a.id=$5) AND ($6='' OR p.id=$6) AND ($7='' OR t.id=$7) AND ($8='' OR replace(unaccent(lower(concat_ws(' ',s.full_name,s.dharma_name,s.birth_year,s.death_year,s.age,s.burial_place,s.sender,s.sent_month,s.notes,p.name,t.name,a.code,h.name))),'-','') LIKE '%'||replace(unaccent(lower($8)),'-','')||'%') AND (NOT $9 OR s.tablet_id IS NULL)`
+	args := []any{a.Role, a.ID, a.AllHouses, o.HouseID, o.AreaID, o.PositionID, o.TabletID, o.Query, o.Unplaced}
 	var total int
 	if e := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter, args...).Scan(&total); e != nil {
 		return nil, 0, e
 	}
-	rows, e := s.pool.Query(ctx, `SELECT `+spiritCols+` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter+` ORDER BY s.full_name,s.id LIMIT $9 OFFSET $10`, append(args, o.Limit, o.Offset)...)
+	rows, e := s.pool.Query(ctx, `SELECT `+spiritCols+` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter+` ORDER BY s.full_name,s.id LIMIT $10 OFFSET $11`, append(args, o.Limit, o.Offset)...)
 	if e != nil {
 		return nil, 0, e
 	}

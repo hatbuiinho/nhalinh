@@ -45,7 +45,7 @@ func TestRequireMethodPermissionsAllowsViewerReads(t *testing.T) {
 	}
 }
 
-func TestUserPermissionsAllowViewerListOnly(t *testing.T) {
+func TestUserPermissionsAreAdminOnly(t *testing.T) {
 	next := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusNoContent) })
 	handler := requireMethodPermissions(map[string]user.Permission{
 		http.MethodGet:  user.PermissionUserRead,
@@ -55,7 +55,7 @@ func TestUserPermissionsAllowViewerListOnly(t *testing.T) {
 	for _, test := range []struct {
 		method string
 		want   int
-	}{{http.MethodGet, http.StatusNoContent}, {http.MethodPost, http.StatusForbidden}} {
+	}{{http.MethodGet, http.StatusForbidden}, {http.MethodPost, http.StatusForbidden}} {
 		request := httptest.NewRequest(test.method, "/api/users", nil)
 		request = request.WithContext(context.WithValue(request.Context(), authContextKey{}, user.User{Role: user.RoleViewer}))
 		response := httptest.NewRecorder()

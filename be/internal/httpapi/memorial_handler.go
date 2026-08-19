@@ -34,10 +34,11 @@ type positionsBatchPayload struct {
 	Positions []positionPayload `json:"positions"`
 }
 type tabletPayload struct {
-	PositionID string          `json:"position_id"`
-	Name       string          `json:"name"`
-	Notes      string          `json:"notes"`
-	Spirits    []spiritPayload `json:"spirits"`
+	PositionID        string          `json:"position_id"`
+	Name              string          `json:"name"`
+	Notes             string          `json:"notes"`
+	Spirits           []spiritPayload `json:"spirits"`
+	ExistingSpiritIDs []string        `json:"existing_spirit_ids"`
 }
 type spiritPayload struct {
 	ID          string `json:"id"`
@@ -204,7 +205,7 @@ func (h *MemorialHandler) Tablets(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Notes: p.Notes, Spirits: spirits})
+		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Notes: p.Notes, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
 		h.write(w, v, e, 201)
 	default:
 		methodNotAllowed(w)
@@ -238,7 +239,7 @@ func (h *MemorialHandler) Spirits(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		v, total, e := h.service.ListSpirits(r.Context(), actor(r), memorial.SearchOptions{Query: r.URL.Query().Get("q"), HouseID: r.URL.Query().Get("house_id"), AreaID: r.URL.Query().Get("area_id"), PositionID: r.URL.Query().Get("position_id"), TabletID: r.URL.Query().Get("tablet_id"), Limit: limit, Offset: offset})
+		v, total, e := h.service.ListSpirits(r.Context(), actor(r), memorial.SearchOptions{Query: r.URL.Query().Get("q"), HouseID: r.URL.Query().Get("house_id"), AreaID: r.URL.Query().Get("area_id"), PositionID: r.URL.Query().Get("position_id"), TabletID: r.URL.Query().Get("tablet_id"), Limit: limit, Offset: offset, Unplaced: r.URL.Query().Get("unplaced") == "true"})
 		h.write(w, map[string]any{"spirits": v, "total": total, "has_more": offset+len(v) < total}, e, 200)
 	case http.MethodPost:
 		var p spiritPayload
@@ -328,7 +329,7 @@ func (h *MemorialHandler) write(w http.ResponseWriter, v any, e error, status in
 	case errors.Is(e, memorial.ErrNotFound):
 		writeError(w, 404, "not_found", "Không tìm thấy dữ liệu")
 	case errors.Is(e, memorial.ErrConflict):
-		writeError(w, 409, "conflict", "Mã hoặc vị trí đã tồn tại")
+		writeError(w, 409, "conflict", "Dữ liệu đã thay đổi hoặc đã tồn tại, vui lòng tải lại")
 	default:
 		writeError(w, 500, "internal_error", "internal server error")
 	}

@@ -37,10 +37,10 @@
 	let canSave = $derived(
 		Boolean(
 			displayName.trim() &&
-				username.trim() &&
-				passwordValid &&
-				(role === 'admin' || allHouses || houseIds.length > 0) &&
-				!userStore.isSaving
+			username.trim() &&
+			passwordValid &&
+			(role === 'admin' || allHouses || houseIds.length > 0) &&
+			!userStore.isSaving
 		)
 	);
 
@@ -299,17 +299,31 @@
 			<fieldset class="space-y-3 rounded-md border border-[var(--color-border)] p-3">
 				<legend class="px-1 text-sm font-medium">Phạm vi Nhà Linh</legend>
 				<label class="flex items-center gap-2 text-sm">
-					<input type="radio" name="house-scope" checked={allHouses} onchange={() => (allHouses = true)} />
+					<input
+						type="radio"
+						name="house-scope"
+						checked={allHouses}
+						onchange={() => (allHouses = true)}
+					/>
 					<span>Tất cả Nhà Linh</span>
 				</label>
 				<label class="flex items-center gap-2 text-sm">
-					<input type="radio" name="house-scope" checked={!allHouses} onchange={() => (allHouses = false)} />
+					<input
+						type="radio"
+						name="house-scope"
+						checked={!allHouses}
+						onchange={() => (allHouses = false)}
+					/>
 					<span>Chỉ các Nhà Linh được chọn</span>
 				</label>
 				{#if !allHouses}
-					<div class="max-h-44 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-muted)] p-2">
+					<div
+						class="max-h-44 space-y-1 overflow-y-auto rounded-md bg-[var(--color-surface-muted)] p-2"
+					>
 						{#each houses as house (house.id)}
-							<label class="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[var(--color-surface)]">
+							<label
+								class="flex items-center gap-2 rounded px-2 py-2 text-sm hover:bg-[var(--color-surface)]"
+							>
 								<input
 									type="checkbox"
 									checked={houseIds.includes(house.id)}

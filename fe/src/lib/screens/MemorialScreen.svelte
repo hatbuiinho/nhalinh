@@ -111,6 +111,7 @@
 		positionLoading = $state(false),
 		tabletLoading = $state(false),
 		desktopView = $state<DesktopView>('table'),
+		contentFullscreen = $state(false),
 		spiritSortKey = $state<SpiritSortKey>('full_name'),
 		spiritSortDirection = $state<'asc' | 'desc'>('asc'),
 		lightboxOpen = $state(false),
@@ -535,15 +536,23 @@
 			cellEdit = null;
 			return;
 		}
-		if (!formOpen) return;
 		if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
-		if (!saving && !imageUploading) formOpen = false;
+		if (formOpen) {
+			if (!saving && !imageUploading) formOpen = false;
+			return;
+		}
+		if (contentFullscreen) contentFullscreen = false;
 	}
 </script>
 
 <svelte:window onkeydown={closeActiveForm} />
 
-<section class="flex h-full min-w-0 flex-col overflow-hidden">
+<section
+	class={[
+		'flex h-full min-w-0 flex-col overflow-hidden',
+		contentFullscreen && 'fixed inset-0 z-30 bg-[var(--color-bg)]'
+	]}
+>
 	<div class="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 md:px-6 lg:px-8">
 		<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[220px_180px_1fr_auto]">
 			<select
@@ -591,37 +600,56 @@
 				<p class="text-xs text-[var(--color-text-secondary)]">
 					{total} Hương linh{selectedHouse ? ` · ${selectedHouse.name}` : ''}
 				</p>
-				<div
-					class="hidden items-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-0.5 md:flex"
-					aria-label="Kiểu hiển thị"
-				>
+				<div class="flex items-center gap-2">
+					<div
+						class="hidden items-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-0.5 md:flex"
+						aria-label="Kiểu hiển thị"
+					>
+						<button
+							type="button"
+							onclick={() => setDesktopView('list')}
+							aria-pressed={desktopView === 'list'}
+							class={[
+								'grid h-8 w-9 place-items-center rounded-sm',
+								desktopView === 'list'
+									? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-dark)]'
+									: 'text-[var(--color-text-muted)]'
+							]}
+							aria-label="Xem dạng danh sách"
+						>
+							<span class="icon-[lucide--layout-grid] h-4 w-4" aria-hidden="true"></span>
+						</button>
+						<button
+							type="button"
+							onclick={() => setDesktopView('table')}
+							aria-pressed={desktopView === 'table'}
+							class={[
+								'grid h-8 w-9 place-items-center rounded-sm',
+								desktopView === 'table'
+									? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-dark)]'
+									: 'text-[var(--color-text-muted)]'
+							]}
+							aria-label="Xem dạng bảng"
+						>
+							<span class="icon-[lucide--table-2] h-4 w-4" aria-hidden="true"></span>
+						</button>
+					</div>
 					<button
 						type="button"
-						onclick={() => setDesktopView('list')}
-						aria-pressed={desktopView === 'list'}
-						class={[
-							'grid h-8 w-9 place-items-center rounded-sm',
-							desktopView === 'list'
-								? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-dark)]'
-								: 'text-[var(--color-text-muted)]'
-						]}
-						aria-label="Xem dạng danh sách"
+						onclick={() => (contentFullscreen = !contentFullscreen)}
+						aria-label={contentFullscreen
+							? 'Thu nhỏ màn hình Hương linh'
+							: 'Phóng to toàn màn hình Hương linh'}
+						title={contentFullscreen ? 'Thu nhỏ' : 'Phóng to toàn màn hình'}
+						class="grid h-9 w-9 shrink-0 place-items-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-primary-dark)]"
 					>
-						<span class="icon-[lucide--layout-grid] h-4 w-4" aria-hidden="true"></span>
-					</button>
-					<button
-						type="button"
-						onclick={() => setDesktopView('table')}
-						aria-pressed={desktopView === 'table'}
-						class={[
-							'grid h-8 w-9 place-items-center rounded-sm',
-							desktopView === 'table'
-								? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-dark)]'
-								: 'text-[var(--color-text-muted)]'
-						]}
-						aria-label="Xem dạng bảng"
-					>
-						<span class="icon-[lucide--table-2] h-4 w-4" aria-hidden="true"></span>
+						<span
+							class={[
+								'h-4 w-4',
+								contentFullscreen ? 'icon-[lucide--minimize-2]' : 'icon-[lucide--maximize-2]'
+							]}
+							aria-hidden="true"
+						></span>
 					</button>
 				</div>
 			</div>

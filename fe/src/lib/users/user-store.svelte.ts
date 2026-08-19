@@ -68,15 +68,7 @@ class UserStore {
 		if (this.isSaving) return null;
 		this.isSaving = true;
 		try {
-			const item = await updateUser(
-				id,
-				displayName,
-				username,
-				role,
-				password,
-				allHouses,
-				houseIds
-			);
+			const item = await updateUser(id, displayName, username, role, password, allHouses, houseIds);
 			this.items = sortUsers(
 				this.items.map((candidate) => (candidate.id === item.id ? item : candidate))
 			);

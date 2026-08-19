@@ -25,13 +25,13 @@
 			onclick={onClose}
 		></button>
 		<div
-			class="relative z-10 w-full max-w-sm rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-popover)]"
+			class="relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-popover)]"
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}
 			tabindex="-1"
 		>
-			<div class="flex items-center justify-between gap-3">
+			<div class="flex shrink-0 items-center justify-between gap-3">
 				<h2 class="truncate text-base font-semibold text-[var(--color-text)]">{title}</h2>
 				<button
 					type="button"
@@ -42,11 +42,11 @@
 					<span class="icon-[lucide--x] h-5 w-5" aria-hidden="true"></span>
 				</button>
 			</div>
-			<div class="mt-3">
+			<div class="mt-3 min-h-0 overflow-y-auto">
 				{@render children?.()}
 			</div>
 			{#if footer}
-				<div class="mt-4">
+				<div class="mt-4 shrink-0">
 					{@render footer()}
 				</div>
 			{/if}

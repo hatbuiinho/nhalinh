@@ -230,7 +230,17 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 	if name == "" {
 		return Tablet{}, fmt.Errorf("%w: tablet name is required", ErrInvalidInput)
 	}
-	if len(in.Spirits) == 0 || len(in.Spirits) > 500 {
+	existingSpiritIDs := make([]string, 0, len(in.ExistingSpiritIDs))
+	seenExistingIDs := make(map[string]bool, len(in.ExistingSpiritIDs))
+	for _, rawID := range in.ExistingSpiritIDs {
+		id := strings.TrimSpace(rawID)
+		if id == "" || seenExistingIDs[id] {
+			return Tablet{}, fmt.Errorf("%w: existing spirit ids must be unique and non-empty", ErrInvalidInput)
+		}
+		seenExistingIDs[id] = true
+		existingSpiritIDs = append(existingSpiritIDs, id)
+	}
+	if len(in.Spirits)+len(existingSpiritIDs) == 0 || len(in.Spirits)+len(existingSpiritIDs) > 500 {
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
 	now := s.now().UTC()
@@ -248,7 +258,7 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 		spirit.UpdatedAt = now
 		spirits = append(spirits, spirit)
 	}
-	return s.store.CreateTabletWithSpirits(ctx, tablet, spirits)
+	return s.store.CreateTabletWithSpirits(ctx, tablet, spirits, existingSpiritIDs, house)
 }
 func (s *Service) UpdateTablet(ctx context.Context, actor Actor, id string, in TabletInput) (Tablet, error) {
 	house, err := s.store.HouseIDForTablet(ctx, id)

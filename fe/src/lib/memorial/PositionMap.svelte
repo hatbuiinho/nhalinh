@@ -4,9 +4,14 @@
 	let {
 		positions,
 		areaCode,
+		fullscreen = false,
 		onposition
-	}: { positions: Position[]; areaCode: string; onposition: (position: Position) => void } =
-		$props();
+	}: {
+		positions: Position[];
+		areaCode: string;
+		fullscreen?: boolean;
+		onposition: (position: Position) => void;
+	} = $props();
 	type HeatLevel = 'empty' | 'low' | 'medium' | 'high' | 'very-high';
 	type HeatFilter = 'all' | HeatLevel;
 	let heatFilter = $state<HeatFilter>('all');
@@ -50,7 +55,10 @@
 </script>
 
 <div
-	class="flex max-h-[calc(100dvh-13rem)] min-h-[420px] flex-col overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] lg:min-h-0 lg:flex-1"
+	class={[
+		'flex flex-col overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]',
+		fullscreen ? 'min-h-0 flex-1' : 'max-h-[calc(100dvh-13rem)] min-h-[420px] lg:min-h-0 lg:flex-1'
+	]}
 >
 	<div
 		class="z-10 flex shrink-0 flex-wrap items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3"
@@ -88,19 +96,21 @@
 		>
 			Chưa có vị trí trong khu vực này
 		</p>
-	{:else}<div class="min-h-0 flex-1 overflow-auto p-4">
+	{:else}<div class="min-h-0 flex-1 overflow-auto">
 			<div
 				class="grid min-w-max gap-2"
 				style={`grid-template-columns: 56px repeat(${maxColumn}, minmax(132px, 1fr));`}
 			>
-				<div></div>
+				<div
+					class="sticky top-0 left-0 z-30 bg-[var(--color-surface)] shadow-[1px_1px_0_var(--color-border)]"
+				></div>
 				{#each columns as column (column)}<div
-						class="px-2 py-1 text-center text-xs font-semibold text-[var(--color-text-secondary)]"
+						class="sticky top-0 z-20 bg-[var(--color-surface)] px-2 py-2 text-center text-xs font-semibold text-[var(--color-text-secondary)] shadow-[0_1px_0_var(--color-border)]"
 					>
 						Cột {column}
 					</div>{/each}
 				{#each rows as row (row)}<div
-						class="grid place-items-center text-xs font-semibold text-[var(--color-text-secondary)]"
+						class="sticky left-0 z-10 grid place-items-center bg-[var(--color-surface)] text-xs font-semibold text-[var(--color-text-secondary)] shadow-[1px_0_0_var(--color-border)]"
 					>
 						Hàng {row}
 					</div>

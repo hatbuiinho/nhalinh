@@ -22,10 +22,10 @@ func (h *UserHandler) Collection(w http.ResponseWriter, r *http.Request) {
 		writeJSON(w, http.StatusOK, map[string][]user.User{"users": items})
 	case http.MethodPost:
 		var payload struct {
-			Username    string `json:"username"`
-			DisplayName string `json:"display_name"`
-			Password    string `json:"password"`
-			Role        string `json:"role"`
+			Username    string   `json:"username"`
+			DisplayName string   `json:"display_name"`
+			Password    string   `json:"password"`
+			Role        string   `json:"role"`
 			AllHouses   bool     `json:"all_houses"`
 			HouseIDs    []string `json:"house_ids"`
 		}
@@ -57,10 +57,10 @@ func (h *UserHandler) Item(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	var payload struct {
-		Username    string `json:"username"`
-		DisplayName string `json:"display_name"`
-		Role        string `json:"role"`
-		Password    string `json:"password"`
+		Username    string   `json:"username"`
+		DisplayName string   `json:"display_name"`
+		Role        string   `json:"role"`
+		Password    string   `json:"password"`
 		AllHouses   bool     `json:"all_houses"`
 		HouseIDs    []string `json:"house_ids"`
 	}

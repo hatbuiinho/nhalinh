@@ -1,10 +1,10 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
-	import { authStore, type AdminUser } from '$lib/auth/auth-store.svelte';
+	import { authStore } from '$lib/auth/auth-store.svelte';
 	import { toastStore } from '$lib/ui/toast-store.svelte';
-	import { listUsers } from '$lib/users/api';
 	import LoadingIndicator from '$lib/ui/LoadingIndicator.svelte';
 	import InlineSpiritEditor from '$lib/memorial/InlineSpiritEditor.svelte';
+	import UnplacedSpiritPicker from '$lib/memorial/UnplacedSpiritPicker.svelte';
 	import InlinePositionEditor from '$lib/memorial/InlinePositionEditor.svelte';
 	import PositionMap from '$lib/memorial/PositionMap.svelte';
 	import {
@@ -17,19 +17,19 @@
 		listPositions,
 		listTabletSpirits,
 		listTablets,
-		setHouseMember,
 		updatePosition,
 		updateTablet,
 		type EditableSpiritInput,
 		type Area,
 		type House,
 		type Position,
+		type Spirit,
 		type Tablet
 	} from '$lib/memorial/api';
 	import { emptyInlineSpirit } from '$lib/memorial/sheet-parser';
 	import { emptyPositionRow, type EditablePositionRow } from '$lib/memorial/position-sheet-parser';
 
-	type Mode = 'house' | 'area' | 'position' | 'tablet' | 'member' | '';
+	type Mode = 'house' | 'area' | 'position' | 'tablet' | '';
 	type PositionView = 'table' | 'map';
 	type PositionSortKey =
 		| 'house_name'
@@ -52,8 +52,7 @@
 	let houses = $state<House[]>([]),
 		areas = $state<Area[]>([]),
 		positions = $state<Position[]>([]),
-		tablets = $state<Tablet[]>([]),
-		users = $state<AdminUser[]>([]);
+		tablets = $state<Tablet[]>([]);
 	let houseId = $state(''),
 		areaId = $state(''),
 		positionId = $state(''),
@@ -66,11 +65,13 @@
 		positionSortKey = $state<PositionSortKey>('row_number'),
 		positionSortDirection = $state<'asc' | 'desc'>('asc'),
 		positionView = $state<PositionView>('table'),
+		positionFullscreen = $state(false),
 		mode = $state<Mode>('');
 	let editingPosition = $state<Position | null>(null);
 	let newPositions = $state<EditablePositionRow[]>([emptyPositionRow()]);
 	let drawerPosition = $state<Position | null>(null);
 	let editingTablet = $state<Tablet | null>(null);
+	let selectedUnplacedSpirits = $state<Spirit[]>([]);
 	let houseForm = $state({ name: '', address: '', notes: '' }),
 		areaForm = $state({ code: '', name: '', notes: '' }),
 		positionForm = $state<{
@@ -78,19 +79,12 @@
 			column_number: number;
 			notes: string;
 		}>({ row_number: 1, column_number: 1, notes: '' }),
-		tabletForm = $state<{ name: string; notes: string; spirits: EditableSpiritInput[] }>({
+		tabletForm = $state<{ name: string; spirits: EditableSpiritInput[] }>({
 			name: '',
-			notes: '',
 			spirits: [emptyInlineSpirit()]
-		}),
-		memberForm = $state({ user_id: '', role: 'viewer' });
+		});
 	let house = $derived(houses.find((v) => v.id === houseId));
-	let canWrite = $derived(
-		authStore.user?.role === 'admin' ||
-			house?.access_role === 'manager' ||
-			house?.access_role === 'editor'
-	);
-	let canManage = $derived(authStore.user?.role === 'admin' || house?.access_role === 'manager');
+	let canWrite = $derived(authStore.user?.role === 'admin' || house?.access_role === 'editor');
 	let selectedPosition = $derived(
 		drawerPosition ?? positions.find((position) => position.id === positionId)
 	);
@@ -178,15 +172,8 @@
 		}
 		if (next === 'tablet') {
 			editingTablet = null;
-			tabletForm = { name: '', notes: '', spirits: [emptyInlineSpirit()] };
-		}
-		if (next === 'member') {
-			memberForm = { user_id: '', role: 'viewer' };
-			try {
-				users = (await listUsers()).filter((u) => u.role !== 'admin');
-			} catch (e) {
-				toastStore.error(msg(e));
-			}
+			selectedUnplacedSpirits = [];
+			tabletForm = { name: '', spirits: [emptyInlineSpirit()] };
 		}
 	}
 	function editPosition(position: Position) {
@@ -204,9 +191,9 @@
 			const items = await listTabletSpirits(tablet.id);
 			positionId = tablet.position_id;
 			editingTablet = tablet;
+			selectedUnplacedSpirits = [];
 			tabletForm = {
 				name: tablet.name,
-				notes: tablet.notes,
 				spirits: items.map((spirit) => ({
 					id: spirit.id,
 					full_name: spirit.full_name,
@@ -228,6 +215,7 @@
 	}
 	async function save(e: SubmitEvent) {
 		e.preventDefault();
+		if (mode === 'tablet' && editingTablet && !canWrite) return;
 		saving = true;
 		try {
 			let successMessage = 'Đã lưu dữ liệu';
@@ -281,17 +269,21 @@
 				const payload = {
 					position_id: positionId,
 					name: tabletForm.name,
-					notes: tabletForm.notes,
+					notes: '',
 					spirits
 				};
 				if (editingTablet) await updateTablet(editingTablet.id, payload);
-				else await createTablet(payload);
+				else {
+					await createTablet({
+						...payload,
+						existing_spirit_ids: selectedUnplacedSpirits.map((spirit) => spirit.id)
+					});
+				}
 				tablets = await listTablets(positionId);
 				areas = await listAreas(houseId);
 				positions = await listPositions(areaId);
 				editingTablet = null;
-			} else if (mode === 'member')
-				await setHouseMember(houseId, memberForm.user_id, memberForm.role);
+			}
 			toastStore.success(successMessage);
 			mode = '';
 		} catch (err) {
@@ -371,6 +363,7 @@
 			return;
 		}
 		if (drawerOpen) drawerOpen = false;
+		else if (positionFullscreen) positionFullscreen = false;
 	}
 </script>
 
@@ -398,11 +391,6 @@
 					onclick={() => void open('area')}
 					class="h-11 rounded-md border border-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-dark)]"
 					>Thêm khu vực</button
-				>{/if}{#if canManage && houseId}<button
-					type="button"
-					onclick={() => void open('member')}
-					class="h-11 rounded-md border border-[var(--color-border-strong)] px-4 text-sm font-semibold"
-					>Phân quyền</button
 				>{/if}
 		</div>
 		{#if loading}<div class="py-16">
@@ -437,7 +425,13 @@
 							>{/each}
 					</div>
 				</aside>
-				<main class="min-w-0 lg:flex lg:min-h-0 lg:flex-col">
+				<main
+					class={[
+						'min-w-0 lg:flex lg:min-h-0 lg:flex-col',
+						positionFullscreen &&
+							'fixed inset-0 z-30 flex min-h-0 flex-col overflow-hidden bg-[var(--color-bg)] p-4 sm:p-6'
+					]}
+				>
 					<div class="mb-3 flex shrink-0 items-center justify-between">
 						<div>
 							<h2 class="font-semibold">Vị trí</h2>
@@ -471,6 +465,23 @@
 									><span class="icon-[lucide--map] h-4 w-4" aria-hidden="true"></span></button
 								>
 							</div>
+							{#if areaId}<button
+									type="button"
+									onclick={() => (positionFullscreen = !positionFullscreen)}
+									aria-label={positionFullscreen
+										? 'Thu nhỏ màn hình vị trí'
+										: 'Phóng to toàn màn hình vị trí'}
+									title={positionFullscreen ? 'Thu nhỏ' : 'Phóng to toàn màn hình'}
+									class="grid h-10 w-10 shrink-0 place-items-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)] hover:text-[var(--color-primary-dark)]"
+								>
+									<span
+										class={[
+											'h-4 w-4',
+											positionFullscreen ? 'icon-[lucide--minimize-2]' : 'icon-[lucide--maximize-2]'
+										]}
+										aria-hidden="true"
+									></span>
+								</button>{/if}
 							{#if canWrite && areaId}<button
 									type="button"
 									onclick={() => void open('position')}
@@ -495,11 +506,17 @@
 							Chưa có vị trí trong khu vực này
 						</div>{:else if positionView === 'map'}<PositionMap
 							{positions}
+							fullscreen={positionFullscreen}
 							areaCode={areas.find((area) => area.id === areaId)?.code ?? ''}
 							onposition={(position) => void openPositionDrawer(position)}
 						/>
 					{:else}<div
-							class="max-h-[calc(100dvh-17rem)] min-h-[360px] overflow-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] lg:min-h-0 lg:flex-1"
+							class={[
+								'overflow-auto rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]',
+								positionFullscreen
+									? 'min-h-0 flex-1'
+									: 'max-h-[calc(100dvh-17rem)] min-h-[360px] lg:min-h-0 lg:flex-1'
+							]}
 						>
 							<table
 								class="w-full min-w-[920px] border-separate border-spacing-0 text-left text-sm"
@@ -637,18 +654,14 @@
 					</div>{:else}<div class="space-y-3">
 						{#each tablets as tablet (tablet.id)}<button
 								type="button"
-								disabled={!canWrite}
 								onclick={() => void editTablet(tablet)}
-								title={canWrite ? 'Sửa bài vị và Hương linh' : undefined}
-								class="w-full rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left enabled:hover:border-[var(--color-primary)] enabled:hover:bg-[var(--color-primary-soft)] disabled:cursor-default"
+								title={canWrite ? 'Sửa bài vị và Hương linh' : 'Xem danh sách Hương linh'}
+								class="w-full cursor-pointer rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4 text-left hover:border-[var(--color-primary)] hover:bg-[var(--color-primary-soft)]"
 							>
 								<h3 class="truncate font-semibold">{tablet.name}</h3>
 								<p class="mt-1 text-xs text-[var(--color-text-secondary)]">
 									{tablet.spirit_count} Hương linh
 								</p>
-								{#if tablet.notes}<p class="mt-3 text-sm text-[var(--color-text-secondary)]">
-										{tablet.notes}
-									</p>{/if}
 							</button>{/each}
 					</div>{/if}
 			</div>
@@ -687,9 +700,11 @@
 								: 'Thêm nhiều vị trí'
 							: mode === 'tablet'
 								? editingTablet
-									? 'Sửa bài vị và danh sách Hương linh'
+									? canWrite
+										? 'Sửa bài vị và danh sách Hương linh'
+										: 'Thông tin bài vị và danh sách Hương linh'
 									: 'Thêm bài vị'
-								: 'Phân quyền Nhà Linh'}
+								: ''}
 			</h2>
 			<div
 				class={mode === 'tablet' || (mode === 'position' && !editingPosition)
@@ -744,44 +759,29 @@
 				{:else if mode === 'tablet'}<div
 						class="shrink-0 space-y-3 border-b border-[var(--color-border)] pb-3"
 					>
-						<div class="grid gap-3 md:grid-cols-2">
+						<div>
 							<label class="block"
 								><span class="mb-1 block text-sm">Tên bài vị *</span><input
 									bind:value={tabletForm.name}
-									required
-									class="h-10 w-full rounded-md border-[var(--color-border-strong)]"
-								/></label
-							><label class="block"
-								><span class="mb-1 block text-sm">Ghi chú bài vị</span><input
-									bind:value={tabletForm.notes}
+									required={canWrite}
+									readonly={!canWrite}
 									class="h-10 w-full rounded-md border-[var(--color-border-strong)]"
 								/></label
 							>
 						</div>
+						{#if !editingTablet}<UnplacedSpiritPicker
+								houseId={selectedPosition?.house_id ?? houseId}
+								bind:selected={selectedUnplacedSpirits}
+							/>{/if}
 					</div>
 					<InlineSpiritEditor
 						bind:items={tabletForm.spirits}
 						onbusychange={(busy) => (inlineEditorBusy = busy)}
 						allowExistingUploads={Boolean(editingTablet)}
+						requireFirst={Boolean(editingTablet) || selectedUnplacedSpirits.length === 0}
+						readOnly={Boolean(editingTablet) && !canWrite}
 					/>
-				{:else}<label class="block"
-						><span class="mb-1 block text-sm">Tài khoản *</span><select
-							bind:value={memberForm.user_id}
-							required
-							class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
-							><option value="">Chọn tài khoản</option>{#each users as user (user.id)}<option
-									value={user.id}>{user.display_name} (@{user.username})</option
-								>{/each}</select
-						></label
-					><label class="block"
-						><span class="mb-1 block text-sm">Quyền</span><select
-							bind:value={memberForm.role}
-							class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
-							><option value="viewer">Chỉ xem</option><option value="editor"
-								>Cập nhật dữ liệu</option
-							><option value="manager">Quản lý & phân quyền</option></select
-						></label
-					>{/if}
+				{/if}
 			</div>
 			<div
 				class={[
@@ -794,13 +794,14 @@
 				<button
 					type="button"
 					onclick={() => (mode = '')}
-					class="h-11 rounded-md border px-5 text-sm font-semibold">Huỷ</button
-				><button
-					type="submit"
-					disabled={saving || inlineEditorBusy}
-					class="h-11 rounded-md bg-[var(--color-primary)] px-6 text-sm font-semibold text-white disabled:opacity-50"
-					>Lưu</button
-				>
+					class="h-11 rounded-md border px-5 text-sm font-semibold"
+					>{mode === 'tablet' && editingTablet && !canWrite ? 'Đóng' : 'Huỷ'}</button
+				>{#if !(mode === 'tablet' && editingTablet && !canWrite)}<button
+						type="submit"
+						disabled={saving || inlineEditorBusy}
+						class="h-11 rounded-md bg-[var(--color-primary)] px-6 text-sm font-semibold text-white disabled:opacity-50"
+						>Lưu</button
+					>{/if}
 			</div>
 		</form>
 	</div>{/if}
