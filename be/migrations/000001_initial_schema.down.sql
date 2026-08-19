@@ -1,0 +1,10 @@
+DROP TABLE IF EXISTS spirits;
+DROP TABLE IF EXISTS memorial_tablets;
+DROP TABLE IF EXISTS memorial_positions;
+DROP TABLE IF EXISTS memorial_areas;
+DROP TABLE IF EXISTS spirit_house_members;
+DROP TABLE IF EXISTS spirit_houses;
+DROP TABLE IF EXISTS user_devices;
+DROP TABLE IF EXISTS user_sessions;
+DROP TABLE IF EXISTS users;
+DROP EXTENSION IF EXISTS unaccent;

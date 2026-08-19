@@ -1,0 +1,143 @@
+package memorial
+
+import (
+	"context"
+	"errors"
+	"testing"
+	"time"
+)
+
+func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC) })
+	admin := Actor{ID: "admin", Role: "admin"}
+	viewer := Actor{ID: "viewer", Role: "viewer"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh 1"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.ListAreas(ctx, viewer, house.ID); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("expected forbidden before assignment, got %v", err)
+	}
+	if err = service.SetMember(ctx, admin, house.ID, viewer.ID, "viewer"); err != nil {
+		t.Fatal(err)
+	}
+	area, err := service.CreateArea(ctx, admin, AreaInput{HouseID: house.ID, Code: "a"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	position, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 2, ColumnNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if position.Name != "2A-1" {
+		t.Fatalf("unexpected generated position: %s", position.Name)
+	}
+	positionMatches, err := service.SearchPositions(ctx, viewer, PositionSearchOptions{HouseID: house.ID, Query: "2a1", Limit: 20})
+	if err != nil || len(positionMatches) != 1 || positionMatches[0].ID != position.ID {
+		t.Fatalf("unexpected direct position search: items=%d err=%v", len(positionMatches), err)
+	}
+	position, err = service.UpdatePosition(ctx, admin, position.ID, PositionInput{AreaID: area.ID, RowNumber: 3, ColumnNumber: 2, Notes: "Đã sửa"})
+	if err != nil || position.Name != "3A-2" || position.Notes != "Đã sửa" {
+		t.Fatalf("unexpected updated position: %#v, err=%v", position, err)
+	}
+	if _, err = service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 4, ColumnNumber: 1}); err != nil {
+		t.Fatal(err)
+	}
+	tablet, err := service.CreateTablet(ctx, admin, TabletInput{PositionID: position.ID, Name: "Bài vị 1", Spirits: []SpiritInput{{FullName: "Nguyễn Văn An"}, {FullName: "Trần Thị Bình"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if tablet.SpiritCount != 2 {
+		t.Fatalf("expected two inline spirits, got %d", tablet.SpiritCount)
+	}
+	created, _, err := service.ListSpirits(ctx, admin, SearchOptions{TabletID: tablet.ID, Limit: 500})
+	if err != nil || len(created) != 2 {
+		t.Fatalf("unexpected created spirits: items=%d err=%v", len(created), err)
+	}
+	tablet, err = service.UpdateTablet(ctx, admin, tablet.ID, TabletInput{
+		PositionID: position.ID,
+		Name:       "Bài vị đã sửa",
+		Notes:      "Ghi chú mới",
+		Spirits: []SpiritInput{
+			{ID: created[0].ID, FullName: "Nguyễn Văn An đã sửa"},
+			{FullName: "Lê Văn Cường"},
+		},
+	})
+	if err != nil || tablet.Name != "Bài vị đã sửa" || tablet.SpiritCount != 2 {
+		t.Fatalf("unexpected updated tablet: %#v, err=%v", tablet, err)
+	}
+	updated, _, err := service.ListSpirits(ctx, admin, SearchOptions{TabletID: tablet.ID, Limit: 500})
+	if err != nil || len(updated) != 2 {
+		t.Fatalf("unexpected updated spirits: items=%d err=%v", len(updated), err)
+	}
+	names := map[string]bool{updated[0].FullName: true, updated[1].FullName: true}
+	if !names["Nguyễn Văn An đã sửa"] || !names["Lê Văn Cường"] || names["Trần Thị Bình"] {
+		t.Fatalf("unexpected synchronized spirit list: %#v", names)
+	}
+	items, total, err := service.ListSpirits(ctx, viewer, SearchOptions{HouseID: house.ID, Query: "3a2", Limit: 20})
+	if err != nil || total != 2 || len(items) != 2 {
+		t.Fatalf("unexpected search: total=%d items=%d err=%v", total, len(items), err)
+	}
+	if _, err = service.CreateSpirit(ctx, viewer, SpiritInput{TabletID: tablet.ID, FullName: "Không được phép"}); !errors.Is(err, ErrForbidden) {
+		t.Fatalf("viewer write should be forbidden, got %v", err)
+	}
+	unplaced, err := service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "Hương linh chưa xếp"})
+	if err != nil || unplaced.TabletID != "" || unplaced.HouseID != house.ID {
+		t.Fatalf("unexpected unplaced spirit: %#v err=%v", unplaced, err)
+	}
+	batch, err := service.CreateSpirits(ctx, admin, []SpiritInput{
+		{HouseID: house.ID, FullName: "Hương linh batch 1"},
+		{HouseID: house.ID, FullName: "Hương linh batch 2"},
+	})
+	if err != nil || len(batch) != 2 || batch[0].HouseID != house.ID || batch[1].HouseID != house.ID {
+		t.Fatalf("unexpected spirit batch: %#v err=%v", batch, err)
+	}
+	patched, err := service.PatchSpirit(ctx, admin, batch[0].ID, "sender", "Người gửi mới")
+	if err != nil || patched.Sender != "Người gửi mới" || patched.FullName != batch[0].FullName {
+		t.Fatalf("unexpected patched spirit: %#v err=%v", patched, err)
+	}
+	if _, err = service.PatchSpirit(ctx, admin, batch[0].ID, "image_url", "forbidden"); !errors.Is(err, ErrInvalidInput) {
+		t.Fatalf("image_url patch should be rejected, got %v", err)
+	}
+	occupancy, err := service.Occupancy(ctx, viewer, house.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if occupancy.Summary.PositionCount != 2 || occupancy.Summary.EmptyPositionCount != 1 || occupancy.Summary.TabletCount != 1 || occupancy.Summary.SpiritCount != 5 || occupancy.Summary.UnplacedSpiritCount != 3 {
+		t.Fatalf("unexpected occupancy summary: %#v", occupancy.Summary)
+	}
+}
+
+func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC) })
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh batch"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	area, err := service.CreateArea(ctx, admin, AreaInput{HouseID: house.ID, Code: "B"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	created, err := service.CreatePositions(ctx, admin, []PositionInput{
+		{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1},
+		{AreaID: area.ID, RowNumber: 1, ColumnNumber: 2},
+	})
+	if err != nil || len(created) != 2 || created[0].Name != "1B-1" || created[1].Name != "1B-2" {
+		t.Fatalf("unexpected batch positions: %#v err=%v", created, err)
+	}
+	created, err = service.CreatePositions(ctx, admin, []PositionInput{
+		{AreaID: area.ID, RowNumber: 2, ColumnNumber: 1},
+		{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1},
+		{AreaID: area.ID, RowNumber: 2, ColumnNumber: 1},
+	})
+	if err != nil || len(created) != 1 || created[0].Name != "2B-1" {
+		t.Fatalf("expected one new position and duplicates skipped: %#v err=%v", created, err)
+	}
+	positions, err := service.ListPositions(ctx, admin, area.ID)
+	if err != nil || len(positions) != 3 {
+		t.Fatalf("unexpected positions after skipped duplicates: items=%d err=%v", len(positions), err)
+	}
+}

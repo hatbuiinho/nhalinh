@@ -1,0 +1,58 @@
+<script lang="ts">
+	import Logo from '$lib/ui/Logo.svelte';
+	import { authStore } from '$lib/auth/auth-store.svelte';
+	import PasswordInput from '$lib/ui/PasswordInput.svelte';
+
+	let username = $state('');
+	let password = $state('');
+
+	async function submit(event: SubmitEvent) {
+		event.preventDefault();
+		await authStore.login(username, password);
+	}
+</script>
+
+<section class="flex min-h-screen items-center justify-center px-5 py-10">
+	<div class="w-full max-w-sm">
+		<div class="mb-8 text-center">
+			<Logo />
+			<h1 class="mt-5 text-2xl font-semibold">Quản lý nhân sự công quả</h1>
+			<p class="mt-2 text-sm text-[var(--color-text-secondary)]">Hệ thống quản lý Nhà Linh</p>
+		</div>
+
+		<form
+			class="space-y-4 rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-5 shadow-[var(--shadow-soft)]"
+			onsubmit={submit}
+		>
+			<label class="block">
+				<span class="mb-1.5 block text-sm font-medium">Tên đăng nhập</span>
+				<input
+					bind:value={username}
+					autocomplete="username"
+					required
+					class="h-12 w-full rounded-md border-[var(--color-border-strong)]"
+				/>
+			</label>
+			<div>
+				<span class="mb-1.5 block text-sm font-medium">Mật khẩu</span>
+				<PasswordInput
+					bind:value={password}
+					autocomplete="current-password"
+					required
+					inputClass="h-12"
+				/>
+			</div>
+			{#if authStore.error}
+				<p class="text-sm text-[var(--color-danger)]">{authStore.error}</p>
+			{/if}
+			<button
+				type="submit"
+				disabled={authStore.isSubmitting}
+				class="flex h-12 w-full items-center justify-center gap-2 rounded-md bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-60"
+			>
+				<span class="icon-[lucide--log-in] h-5 w-5" aria-hidden="true"></span>
+				{authStore.isSubmitting ? 'Đang đăng nhập...' : 'Đăng nhập'}
+			</button>
+		</form>
+	</div>
+</section>

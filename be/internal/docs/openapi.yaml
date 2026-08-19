@@ -1,0 +1,123 @@
+openapi: 3.1.0
+info:
+  title: Nhà Linh Management API
+  version: 1.0.0
+  description: API quản lý nhiều Nhà Linh, khu vực, bài vị và Hương linh.
+servers:
+  - url: http://localhost:8080
+security:
+  - bearerAuth: []
+paths:
+  /healthz:
+    get:
+      security: []
+      summary: Kiểm tra trạng thái API
+      responses: { "200": { description: API hoạt động } }
+  /api/auth/login:
+    post:
+      security: []
+      summary: Đăng nhập
+      responses: { "200": { description: Đăng nhập thành công } }
+  /api/auth/me:
+    get:
+      summary: Tài khoản hiện tại và danh sách quyền
+      responses: { "200": { description: Thông tin tài khoản } }
+  /api/users:
+    get:
+      summary: Danh sách tài khoản
+      responses: { "200": { description: Danh sách tài khoản } }
+    post:
+      summary: Tạo tài khoản
+      responses: { "201": { description: Tài khoản đã tạo } }
+  /api/spirit-houses:
+    get:
+      summary: Danh sách Nhà Linh được truy cập
+      responses: { "200": { description: Danh sách Nhà Linh } }
+    post:
+      summary: Tạo Nhà Linh mới
+      responses: { "201": { description: Nhà Linh đã tạo } }
+  /api/spirit-houses/{id}:
+    put:
+      summary: Cập nhật Nhà Linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Nhà Linh đã cập nhật } }
+    delete:
+      summary: Xoá Nhà Linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "204": { description: Đã xoá } }
+  /api/spirit-houses/{id}/members:
+    post:
+      summary: Cấp quyền manager, editor hoặc viewer tại Nhà Linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Đã cập nhật quyền } }
+  /api/memorial-areas:
+    get:
+      summary: Danh sách khu vực theo Nhà Linh
+      responses: { "200": { description: Danh sách khu vực } }
+    post:
+      summary: Tạo khu vực
+      responses: { "201": { description: Khu vực đã tạo } }
+  /api/memorial-tablets:
+    get:
+      summary: Danh sách bài vị theo vị trí
+      responses: { "200": { description: Danh sách bài vị } }
+    post:
+      summary: Tạo bài vị cùng 1-500 Hương linh trong một transaction
+      responses: { "201": { description: Bài vị đã tạo } }
+  /api/memorial-tablets/{id}:
+    put:
+      summary: Sửa bài vị và đồng bộ danh sách 1-500 Hương linh trong một transaction
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Bài vị và danh sách Hương linh đã cập nhật } }
+  /api/memorial-positions:
+    get:
+      summary: Danh sách theo khu vực hoặc tìm trực tiếp vị trí theo house_id và q; bỏ qua dấu gạch ngang
+      responses: { "200": { description: Danh sách vị trí } }
+    post:
+      summary: Tạo vị trí trong khu vực
+      responses: { "201": { description: Vị trí đã tạo } }
+  /api/memorial-positions/{id}:
+    put:
+      summary: Sửa hàng, cột và ghi chú của vị trí; tên được tự tính lại
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Vị trí đã cập nhật } }
+  /api/memorial-positions/batch:
+    post:
+      summary: Tạo 1-500 vị trí trong cùng khu vực; tự bỏ qua hàng và cột đã tồn tại
+      responses: { "201": { description: Danh sách vị trí đã tạo và số dòng đã bỏ qua } }
+  /api/memorial-occupancy:
+    get:
+      summary: Thống kê phân bổ theo Nhà Linh, gồm khu vực, vị trí, bài vị và Hương linh
+      parameters: [{ name: house_id, in: query, required: true, schema: { type: string } }]
+      responses: { "200": { description: Dữ liệu tổng hợp cho sơ đồ phân bổ } }
+  /api/spirits:
+    get:
+      summary: Tìm Hương linh không dấu; mã vị trí có thể nhập không có dấu gạch ngang
+      responses: { "200": { description: Danh sách Hương linh } }
+    post:
+      summary: Thêm Hương linh vào bài vị hoặc lưu chưa xếp vị trí bằng house_id
+      responses: { "201": { description: Hương linh đã tạo } }
+  /api/spirits/batch:
+    post:
+      summary: Thêm 1-500 Hương linh trong một transaction
+      responses: { "201": { description: Danh sách Hương linh đã tạo } }
+  /api/spirits/{id}:
+    get:
+      summary: Chi tiết Hương linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Thông tin Hương linh } }
+    put:
+      summary: Cập nhật Hương linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Hương linh đã cập nhật } }
+    patch:
+      summary: Cập nhật đúng một trường dữ liệu trực tiếp của Hương linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "200": { description: Trường dữ liệu đã cập nhật } }
+    delete:
+      summary: Xoá Hương linh
+      parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
+      responses: { "204": { description: Đã xoá } }
+components:
+  securitySchemes:
+    bearerAuth: { type: http, scheme: bearer }
