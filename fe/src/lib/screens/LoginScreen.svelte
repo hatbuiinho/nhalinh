@@ -16,7 +16,6 @@
 	<div class="w-full max-w-sm">
 		<div class="mb-8 text-center">
 			<Logo />
-			<h1 class="mt-5 text-2xl font-semibold">Quản lý nhân sự công quả</h1>
 			<p class="mt-2 text-sm text-[var(--color-text-secondary)]">Hệ thống quản lý Nhà Linh</p>
 		</div>
 

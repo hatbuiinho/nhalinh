@@ -665,7 +665,7 @@
 					{#if areaId && tablets.length === 0}<p
 							class="mt-1 text-xs text-[var(--color-text-secondary)]"
 						>
-							Hãy tạo bài vị trong mục Cấu trúc trước.
+							Hãy tạo bài vị trong mục Cơ cấu tổ chức trước.
 						</p>{/if}
 				</div>
 			{:else if desktopView === 'table'}<div class="min-h-0 flex-1 overflow-y-auto md:hidden">

@@ -12,7 +12,7 @@ export const bottomNavItems = [
 	{
 		name: 'structure' as const,
 		path: '/structure',
-		label: 'Cấu trúc',
+		label: 'Cơ cấu tổ chức',
 		icon: 'icon-[lucide--landmark]'
 	},
 	{

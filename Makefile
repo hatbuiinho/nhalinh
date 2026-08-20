@@ -97,11 +97,11 @@ compose-config:
 
 .PHONY: compose-build
 compose-build:
-	$(COMPOSE_TOOLS) build api ota-publisher
+	$(COMPOSE_TOOLS) build nhalinh-be ota-publisher
 
 .PHONY: compose-up
 compose-up:
-	$(COMPOSE) up -d --build api
+	$(COMPOSE) up -d --build nhalinh-be
 
 .PHONY: compose-down
 compose-down:
@@ -109,11 +109,11 @@ compose-down:
 
 .PHONY: compose-logs
 compose-logs:
-	$(COMPOSE) logs -f api
+	$(COMPOSE) logs -f nhalinh-be
 
 .PHONY: compose-migrate
 compose-migrate:
-	$(COMPOSE) run --rm api /app/migrate up
+	$(COMPOSE) run --rm nhalinh-be /app/migrate up
 
 .PHONY: ota-publish
 ota-publish:

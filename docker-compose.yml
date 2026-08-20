@@ -1,13 +1,4 @@
 services:
-  nhalinh-migrate:
-    image: ${BACKEND_IMAGE:-nhalinh-be:local}
-    restart: "no"
-    env_file:
-      - ${COMPOSE_ENV_FILE:-.env}
-    command: ["/app/migrate", "up"]
-    networks:
-      - nginx_network
-
   nhalinh-be:
     image: ${BACKEND_IMAGE:-nhalinh-be:local}
     build:
@@ -15,9 +6,7 @@ services:
       dockerfile: be/Dockerfile
     container_name: nhalinh-be
     restart: unless-stopped
-    depends_on:
-      nhalinh-migrate:
-        condition: service_completed_successfully
+    command: ["/bin/sh", "-c", "/app/migrate up && exec /app/api"]
     env_file:
       - ${COMPOSE_ENV_FILE:-.env}
     environment:

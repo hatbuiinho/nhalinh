@@ -42,7 +42,7 @@
 					<span class="icon-[lucide--x] h-5 w-5" aria-hidden="true"></span>
 				</button>
 			</div>
-			<div class="mt-3 min-h-0 overflow-y-auto">
+			<div class="mt-3 min-h-0 overflow-y-auto p-1">
 				{@render children?.()}
 			</div>
 			{#if footer}

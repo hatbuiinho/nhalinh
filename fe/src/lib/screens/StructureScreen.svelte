@@ -64,7 +64,7 @@
 		positionQuery = $state(''),
 		positionSortKey = $state<PositionSortKey>('row_number'),
 		positionSortDirection = $state<'asc' | 'desc'>('asc'),
-		positionView = $state<PositionView>('table'),
+		positionView = $state<PositionView>('map'),
 		positionFullscreen = $state(false),
 		mode = $state<Mode>('');
 	let editingPosition = $state<Position | null>(null);
@@ -348,7 +348,7 @@
 			const saved = localStorage.getItem('nhalinh:position-view');
 			if (saved === 'table' || saved === 'map') positionView = saved;
 		} catch {
-			// Keep the table view when browser storage is unavailable.
+			// Keep the default map view when browser storage is unavailable.
 		}
 	}
 	function sortAria(key: PositionSortKey): 'ascending' | 'descending' | 'none' {
@@ -394,7 +394,7 @@
 				>{/if}
 		</div>
 		{#if loading}<div class="py-16">
-				<LoadingIndicator label="Đang tải cấu trúc..." />
+				<LoadingIndicator label="Đang tải cơ cấu tổ chức..." />
 			</div>{:else if houses.length === 0}<div
 				class="rounded-md border border-dashed py-16 text-center"
 			>
