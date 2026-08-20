@@ -6,7 +6,13 @@
 	import { router } from '$lib/navigation/router.svelte';
 	import Logo from '$lib/ui/Logo.svelte';
 
-	let { route }: { route: AppRoute } = $props();
+	let {
+		route,
+		collapsed = false
+	}: {
+		route: AppRoute;
+		collapsed?: boolean;
+	} = $props();
 	let active = $derived(mainRouteFor(route));
 	let profileMenuOpen = $state(false);
 	let profileMenuRoot = $state<HTMLDivElement>();
@@ -15,7 +21,7 @@
 	);
 
 	$effect(() => {
-		route.path;
+		void route.path;
 		profileMenuOpen = false;
 	});
 
@@ -53,36 +59,56 @@
 </script>
 
 <aside
-	class="hidden h-dvh w-60 shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] md:flex"
+	class={[
+		'hidden h-dvh shrink-0 flex-col border-r border-[var(--color-border)] bg-[var(--color-surface)] transition-[width] duration-200 md:flex',
+		collapsed ? 'w-20' : 'w-60'
+	]}
 >
-	<div class="flex h-[73px] items-center border-b border-[var(--color-border)] px-5">
-		<Logo />
+	<div
+		class={[
+			'flex h-[73px] items-center border-b border-[var(--color-border)]',
+			collapsed ? 'justify-center px-2' : 'px-5'
+		]}
+	>
+		{#if !collapsed}
+			<Logo />
+		{:else}
+			<Logo compact />
+		{/if}
 	</div>
 
-	<nav class="flex-1 space-y-1 px-3 py-5" aria-label="Điều hướng chính">
+	<nav class={['flex-1 space-y-1 py-5', collapsed ? 'px-2' : 'px-3']} aria-label="Điều hướng chính">
 		{#each navItems as item (item.name)}
 			<button
 				type="button"
 				class={[
-					'flex h-11 w-full items-center gap-3 rounded-md px-3 text-sm font-semibold',
+					'flex h-11 w-full items-center rounded-md text-sm font-semibold',
+					collapsed ? 'justify-center px-2' : 'gap-3 px-3',
 					active === item.name
 						? 'bg-[var(--color-primary-soft)] text-[var(--color-primary-dark)]'
 						: 'text-[var(--color-text-secondary)] hover:bg-[var(--color-surface-muted)]'
 				]}
 				aria-current={active === item.name ? 'page' : undefined}
+				aria-label={item.label}
+				title={item.label}
 				onclick={() => router.openMain(item.name)}
 			>
 				<span class={['h-5 w-5 shrink-0', item.icon]} aria-hidden="true"></span>
-				<span>{item.label}</span>
+				{#if !collapsed}
+					<span>{item.label}</span>
+				{/if}
 			</button>
 		{/each}
 	</nav>
 
-	<div class="border-t border-[var(--color-border)] p-3">
+	<div class={['border-t border-[var(--color-border)]', collapsed ? 'p-2' : 'p-3']}>
 		<div class="relative" bind:this={profileMenuRoot}>
 			{#if profileMenuOpen}
 				<div
-					class="absolute bottom-full left-0 z-40 mb-2 w-full overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-popover)]"
+					class={[
+						'absolute bottom-full z-40 mb-2 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] py-1 shadow-[var(--shadow-popover)]',
+						collapsed ? 'left-full ml-2 w-60' : 'left-0 w-full'
+					]}
 					role="menu"
 				>
 					<button
@@ -116,8 +142,12 @@
 			{/if}
 			<button
 				type="button"
-				class="flex min-h-14 w-full items-center gap-3 rounded-md px-2 py-2 text-left hover:bg-[var(--color-surface-muted)]"
+				class={[
+					'flex min-h-14 w-full rounded-md px-2 py-2 text-left hover:bg-[var(--color-surface-muted)]',
+					collapsed ? 'justify-center' : 'items-center gap-3'
+				]}
 				aria-label="Mở menu cá nhân"
+				title={collapsed ? authStore.user?.display_name : undefined}
 				aria-haspopup="menu"
 				aria-expanded={profileMenuOpen}
 				onclick={() => (profileMenuOpen = !profileMenuOpen)}
@@ -131,18 +161,20 @@
 							class="h-full w-full rounded-full object-cover"
 						/>{:else}{authStore.user?.display_name.slice(0, 1).toUpperCase() || '?'}{/if}
 				</span>
-				<span class="min-w-0 flex-1">
-					<span class="block truncate text-sm font-semibold">{authStore.user?.display_name}</span>
-					<span class="block truncate text-xs text-[var(--color-text-secondary)]">
-						@{authStore.user?.username}
+				{#if !collapsed}
+					<span class="min-w-0 flex-1">
+						<span class="block truncate text-sm font-semibold">{authStore.user?.display_name}</span>
+						<span class="block truncate text-xs text-[var(--color-text-secondary)]">
+							@{authStore.user?.username}
+						</span>
 					</span>
-				</span>
-				<span
-					class={profileMenuOpen
-						? 'icon-[lucide--chevron-down] h-4 w-4 text-[var(--color-text-muted)]'
-						: 'icon-[lucide--chevron-up] h-4 w-4 text-[var(--color-text-muted)]'}
-					aria-hidden="true"
-				></span>
+					<span
+						class={profileMenuOpen
+							? 'icon-[lucide--chevron-down] h-4 w-4 text-[var(--color-text-muted)]'
+							: 'icon-[lucide--chevron-up] h-4 w-4 text-[var(--color-text-muted)]'}
+						aria-hidden="true"
+					></span>
+				{/if}
 			</button>
 		</div>
 	</div>

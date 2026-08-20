@@ -28,10 +28,16 @@
 	let statisticsMounted = $state(false);
 	let usersMounted = $state(false);
 	let profileMounted = $state(false);
+	let sidebarCollapsed = $state(false);
 
 	onMount(async () => {
 		router.init();
 		await authStore.init();
+		try {
+			sidebarCollapsed = localStorage.getItem('nhalinh:sidebar-collapsed') === 'true';
+		} catch {
+			// Keep default expanded state when browser storage is unavailable.
+		}
 	});
 
 	onDestroy(() => router.destroy());
@@ -67,6 +73,15 @@
 				break;
 		}
 	});
+
+	function toggleSidebar() {
+		sidebarCollapsed = !sidebarCollapsed;
+		try {
+			localStorage.setItem('nhalinh:sidebar-collapsed', String(sidebarCollapsed));
+		} catch {
+			// Sidebar still toggles when browser storage is unavailable.
+		}
+	}
 </script>
 
 {#if authStore.initializing}
@@ -79,9 +94,9 @@
 	<div
 		class="mx-auto flex h-dvh max-w-[1600px] bg-[var(--color-bg)] text-[var(--color-text)] md:border-x md:border-[var(--color-border)]"
 	>
-		<DesktopSidebar {route} />
+		<DesktopSidebar {route} collapsed={sidebarCollapsed} />
 		<div class="flex min-w-0 flex-1 flex-col">
-			<TopBar {route} />
+			<TopBar {route} collapsed={sidebarCollapsed} ontoggle={toggleSidebar} />
 			<section class="relative min-h-0 flex-1 overflow-hidden">
 				{#if memorialMounted}<div class="h-full" class:hidden={route.name !== 'memorial'}>
 						<MemorialScreen />

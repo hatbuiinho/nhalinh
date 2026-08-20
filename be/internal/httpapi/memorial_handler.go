@@ -2,8 +2,10 @@ package httpapi
 
 import (
 	"errors"
+	"io"
 	"net/http"
 	"nhalinh/be/internal/memorial"
+	"path/filepath"
 	"strings"
 )
 
@@ -62,6 +64,8 @@ type spiritPatchPayload struct {
 	Field string `json:"field"`
 	Value string `json:"value"`
 }
+
+const maxSpiritImportFileSize = 12 << 20
 
 func actor(r *http.Request) memorial.Actor {
 	u := currentUser(r.Context())
@@ -252,6 +256,64 @@ func (h *MemorialHandler) Spirits(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 	}
 }
+func (h *MemorialHandler) SpiritImportTemplate(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	data, err := h.service.SpiritImportTemplate()
+	if err != nil {
+		h.write(w, nil, err, http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="huong-linh-import-template.xlsx"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
+func (h *MemorialHandler) SpiritImportPreview(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	houseID, raw, ok := readSpiritImportUpload(w, r)
+	if !ok {
+		return
+	}
+	preview, err := h.service.PreviewSpiritImport(r.Context(), actor(r), houseID, raw)
+	h.write(w, preview, err, http.StatusOK)
+}
+func (h *MemorialHandler) SpiritImport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodPost {
+		methodNotAllowed(w)
+		return
+	}
+	houseID, raw, ok := readSpiritImportUpload(w, r)
+	if !ok {
+		return
+	}
+	result, err := h.service.ImportSpirits(r.Context(), actor(r), houseID, raw)
+	h.write(w, result, err, http.StatusCreated)
+}
+func (h *MemorialHandler) SpiritExport(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		methodNotAllowed(w)
+		return
+	}
+	data, err := h.service.ExportSpirits(r.Context(), actor(r), r.URL.Query().Get("scope"), memorial.SearchOptions{
+		Query:   r.URL.Query().Get("q"),
+		HouseID: r.URL.Query().Get("house_id"),
+		AreaID:  r.URL.Query().Get("area_id"),
+	})
+	if err != nil {
+		h.write(w, nil, err, http.StatusOK)
+		return
+	}
+	w.Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	w.Header().Set("Content-Disposition", `attachment; filename="huong-linh-export.xlsx"`)
+	w.WriteHeader(http.StatusOK)
+	_, _ = w.Write(data)
+}
 func (h *MemorialHandler) SpiritsBatch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
 		methodNotAllowed(w)
@@ -301,6 +363,41 @@ func (h *MemorialHandler) Spirit(w http.ResponseWriter, r *http.Request) {
 }
 func spiritInput(p spiritPayload) memorial.SpiritInput {
 	return memorial.SpiritInput{ID: p.ID, HouseID: p.HouseID, TabletID: p.TabletID, FullName: p.FullName, DharmaName: p.DharmaName, BirthYear: p.BirthYear, DeathYear: p.DeathYear, Age: p.Age, ImageURL: p.ImageURL, BurialPlace: p.BurialPlace, Sender: p.Sender, SentMonth: p.SentMonth, Notes: p.Notes}
+}
+func readSpiritImportUpload(w http.ResponseWriter, r *http.Request) (string, []byte, bool) {
+	if err := r.ParseMultipartForm(maxSpiritImportFileSize); err != nil {
+		writeError(w, 400, "invalid_input", "Không đọc được file import")
+		return "", nil, false
+	}
+	houseID := strings.TrimSpace(r.FormValue("house_id"))
+	if houseID == "" {
+		writeError(w, 400, "invalid_input", "house_id is required")
+		return "", nil, false
+	}
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		writeError(w, 400, "invalid_input", "Bạn cần chọn file Excel .xlsx")
+		return "", nil, false
+	}
+	defer file.Close()
+	if strings.ToLower(filepath.Ext(header.Filename)) != ".xlsx" {
+		writeError(w, 400, "invalid_input", "Chỉ hỗ trợ file Excel .xlsx")
+		return "", nil, false
+	}
+	raw, err := io.ReadAll(io.LimitReader(file, maxSpiritImportFileSize+1))
+	if err != nil {
+		writeError(w, 400, "invalid_input", "Không đọc được file Excel")
+		return "", nil, false
+	}
+	if len(raw) == 0 {
+		writeError(w, 400, "invalid_input", "File Excel đang trống")
+		return "", nil, false
+	}
+	if len(raw) > maxSpiritImportFileSize {
+		writeError(w, 400, "invalid_input", "File Excel vượt quá dung lượng cho phép")
+		return "", nil, false
+	}
+	return houseID, raw, true
 }
 func decode(w http.ResponseWriter, r *http.Request, v any) bool {
 	if e := readJSON(r, v); e != nil {

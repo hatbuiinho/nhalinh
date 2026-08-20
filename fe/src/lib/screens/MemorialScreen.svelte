@@ -5,6 +5,7 @@
 	import { toastStore } from '$lib/ui/toast-store.svelte';
 	import LoadingIndicator from '$lib/ui/LoadingIndicator.svelte';
 	import Lightbox from '$lib/ui/Lightbox.svelte';
+	import Popup from '$lib/ui/Popup.svelte';
 	import InlineSpiritEditor from '$lib/memorial/InlineSpiritEditor.svelte';
 	import SpiritImageUploader from '$lib/memorial/SpiritImageUploader.svelte';
 	import { uploadSpiritImage } from '$lib/uploads/api';
@@ -12,12 +13,16 @@
 		createTablet,
 		createSpirits,
 		deleteSpirit,
+		downloadSpiritImportTemplate,
+		exportSpiritsExcel,
+		importSpiritsFromExcel,
 		listAreas,
 		listHouses,
 		listPositions,
 		listSpirits,
 		listTablets,
 		patchSpirit,
+		previewSpiritImport,
 		searchPositions,
 		updateSpirit,
 		type Area,
@@ -26,12 +31,16 @@
 		type InlineSpiritInput,
 		type Position,
 		type Spirit,
+		type SpiritImportPreview,
+		type SpiritImportResult,
 		type SpiritInput,
 		type Tablet
 	} from '$lib/memorial/api';
 	import { emptyInlineSpirit, toInlineSpirit } from '$lib/memorial/sheet-parser';
 
 	type DesktopView = 'list' | 'table';
+	type ImportStep = 'guide' | 'upload' | 'preview';
+	type ExportScope = 'current' | 'all';
 	type SpiritSortKey = keyof Pick<
 		Spirit,
 		| 'image_url'
@@ -117,6 +126,15 @@
 		lightboxOpen = $state(false),
 		lightboxSrc = $state(''),
 		lightboxAlt = $state(''),
+		importPopupOpen = $state(false),
+		importStep = $state<ImportStep>('guide'),
+		importHouseId = $state(''),
+		importFile = $state<File | null>(null),
+		importPreview = $state<SpiritImportPreview | null>(null),
+		importBusy = $state(false),
+		exportPopupOpen = $state(false),
+		exportScope = $state<ExportScope>('current'),
+		exportBusy = $state(false),
 		inlineEditorBusy = $state(false),
 		patchSaving = $state(false),
 		formOpen = $state(false),
@@ -127,6 +145,7 @@
 		formTablets = $state<Tablet[]>([]),
 		selectedFormPosition = $state<Pick<Position, 'id' | 'name'> | null>(null),
 		quickCreateTablet = $state(false),
+		importInputKey = $state(0),
 		timer: ReturnType<typeof setTimeout> | undefined,
 		positionTimer: ReturnType<typeof setTimeout> | undefined,
 		positionRequest = 0,
@@ -279,6 +298,136 @@
 	function search() {
 		if (timer) clearTimeout(timer);
 		timer = setTimeout(() => void load().catch((e) => toastStore.error(message(e))), 300);
+	}
+	function suggestedImportHouse() {
+		if (houseId && houses.some((house) => house.id === houseId)) return houseId;
+		if (houses.length === 1) return houses[0].id;
+		return houses[0]?.id ?? '';
+	}
+	function openImportPopup() {
+		importPopupOpen = true;
+		importStep = 'guide';
+		importHouseId = suggestedImportHouse();
+		importFile = null;
+		importPreview = null;
+		importInputKey++;
+	}
+	function closeImportPopup() {
+		if (importBusy) return;
+		importPopupOpen = false;
+		importStep = 'guide';
+		importFile = null;
+		importPreview = null;
+		importInputKey++;
+	}
+	function continueImportGuide() {
+		if (!importHouseId) {
+			toastStore.error('Vui lòng chọn Nhà Linh để import');
+			return;
+		}
+		importStep = 'upload';
+	}
+	function selectImportFile(event: Event) {
+		const input = event.currentTarget as HTMLInputElement;
+		importFile = input.files?.[0] ?? null;
+		importPreview = null;
+	}
+	async function downloadImportTemplateFile() {
+		importBusy = true;
+		try {
+			const { blob, filename } = await downloadSpiritImportTemplate();
+			downloadBlob(blob, extractFilename(filename) || 'huong-linh-import-template.xlsx');
+		} catch (error) {
+			toastStore.error(message(error));
+		} finally {
+			importBusy = false;
+		}
+	}
+	async function requestSpiritImportPreview() {
+		if (!importHouseId) {
+			toastStore.error('Vui lòng chọn Nhà Linh để import');
+			return;
+		}
+		if (!importFile) {
+			toastStore.error('Vui lòng chọn file Excel .xlsx');
+			return;
+		}
+		importBusy = true;
+		try {
+			importPreview = await previewSpiritImport(importFile, importHouseId);
+			importStep = 'preview';
+		} catch (error) {
+			toastStore.error(message(error));
+		} finally {
+			importBusy = false;
+		}
+	}
+	async function commitSpiritImport() {
+		if (!importHouseId || !importFile || !importPreview) return;
+		importBusy = true;
+		try {
+			const result = await importSpiritsFromExcel(importFile, importHouseId);
+			importBusy = false;
+			toastStore.success(importSummary(result));
+			closeImportPopup();
+			await changeHouseAwareRefresh();
+		} catch (error) {
+			toastStore.error(message(error));
+		} finally {
+			importBusy = false;
+		}
+	}
+	async function changeHouseAwareRefresh() {
+		await load();
+	}
+	function importSummary(result: SpiritImportResult) {
+		const segments = [
+			`Đã import ${result.created_spirit_count} Hương linh`,
+			result.created_area_count > 0 ? `tạo ${result.created_area_count} khu vực` : '',
+			result.created_position_count > 0 ? `tạo ${result.created_position_count} vị trí` : '',
+			result.created_tablet_count > 0 ? `tạo ${result.created_tablet_count} bài vị` : ''
+		].filter(Boolean);
+		return segments.join(' · ');
+	}
+	function openExportPopup() {
+		exportScope = 'current';
+		exportPopupOpen = true;
+	}
+	function closeExportPopup() {
+		if (exportBusy) return;
+		exportPopupOpen = false;
+	}
+	async function exportSpiritWorkbook() {
+		exportBusy = true;
+		try {
+			const { blob, filename } = await exportSpiritsExcel(exportScope, { query, houseId, areaId });
+			downloadBlob(blob, extractFilename(filename) || `huong-linh-${exportScope}.xlsx`);
+			closeExportPopup();
+			toastStore.success(
+				exportScope === 'all'
+					? 'Đã tải file Excel toàn bộ Hương linh'
+					: 'Đã tải file Excel theo dữ liệu đang lọc'
+			);
+		} catch (error) {
+			toastStore.error(message(error));
+		} finally {
+			exportBusy = false;
+		}
+	}
+	function extractFilename(contentDisposition: string | null) {
+		if (!contentDisposition) return '';
+		const match = contentDisposition.match(/filename="?([^"]+)"?/i);
+		return match?.[1] ?? '';
+	}
+	function downloadBlob(blob: Blob, filename: string) {
+		const url = URL.createObjectURL(blob);
+		const link = document.createElement('a');
+		link.href = url;
+		link.download = filename;
+		document.body.append(link);
+		link.click();
+		link.remove();
+		URL.revokeObjectURL(url);
 	}
 	function add() {
 		editing = null;
@@ -536,6 +685,14 @@
 			cellEdit = null;
 			return;
 		}
+		if (importPopupOpen && !importBusy) {
+			closeImportPopup();
+			return;
+		}
+		if (exportPopupOpen && !exportBusy) {
+			closeExportPopup();
+			return;
+		}
 		if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
 		if (formOpen) {
 			if (!saving && !imageUploading) formOpen = false;
@@ -601,6 +758,25 @@
 					{total} Hương linh{selectedHouse ? ` · ${selectedHouse.name}` : ''}
 				</p>
 				<div class="flex items-center gap-2">
+					<button
+						type="button"
+						onclick={openExportPopup}
+						class="h-9 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs font-semibold hover:bg-[var(--color-surface-muted)]"
+					>
+						<span class="mr-1 icon-[lucide--download] inline-block h-4 w-4 align-text-bottom"></span>
+						Export Excel
+					</button>
+					{#if canWrite}
+						<button
+							type="button"
+							onclick={openImportPopup}
+							disabled={houses.length === 0}
+							class="h-9 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs font-semibold hover:bg-[var(--color-surface-muted)] disabled:opacity-50"
+						>
+							<span class="mr-1 icon-[lucide--upload] inline-block h-4 w-4 align-text-bottom"></span>
+							Import Excel
+						</button>
+					{/if}
 					<div
 						class="hidden items-center rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] p-0.5 md:flex"
 						aria-label="Kiểu hiển thị"
@@ -684,6 +860,202 @@
 </section>
 
 <Lightbox src={lightboxSrc} alt={lightboxAlt} bind:open={lightboxOpen} />
+
+<Popup
+	open={importPopupOpen}
+	title={importStep === 'guide'
+		? 'Hướng dẫn import Excel'
+		: importStep === 'upload'
+			? 'Chọn file Excel'
+			: 'Xem trước import Excel'}
+	onClose={closeImportPopup}
+>
+	<div class="space-y-4 text-sm">
+		{#if importStep === 'guide'}
+			<label class="block">
+				<span class="mb-1.5 block font-medium">Nhà Linh import vào *</span>
+				<select
+					bind:value={importHouseId}
+					class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
+				>
+					<option value="">Chọn Nhà Linh</option>
+					{#each houses as house (house.id)}
+						<option value={house.id}>{house.name}</option>
+					{/each}
+				</select>
+			</label>
+			<div class="rounded-md bg-[var(--color-surface-muted)] p-3 text-xs text-[var(--color-text-secondary)]">
+				<p class="font-semibold text-[var(--color-text)]">File Excel cần đúng format chuẩn</p>
+				<p class="mt-2">
+					Các cột bắt buộc theo mẫu: Họ tên, Pháp danh, Năm sinh, Năm mất, Tuổi, Ảnh URL,
+					Nơi an táng, Người gửi, Tháng gửi, Ghi chú, Vị trí, Bài vị.
+				</p>
+				<p class="mt-2">
+					Nếu vị trí có dạng như <code>38D-10</code>, hệ thống sẽ tự parse thành Khu D, hàng 38,
+					cột 10 và tự tạo Khu, Vị trí, Bài vị nếu chưa có.
+				</p>
+				<p class="mt-2">
+					Nếu cột Bài vị để trống thì hệ thống sẽ lấy tên Hương linh làm tên bài vị mặc định.
+				</p>
+			</div>
+			<button
+				type="button"
+				onclick={downloadImportTemplateFile}
+				class="inline-flex h-10 items-center rounded-md border border-[var(--color-border-strong)] px-3 text-xs font-semibold"
+			>
+				<span class="mr-1 icon-[lucide--file-spreadsheet] h-4 w-4"></span>Tải file mẫu
+			</button>
+		{:else if importStep === 'upload'}
+			<div class="rounded-md bg-[var(--color-surface-muted)] p-3 text-xs text-[var(--color-text-secondary)]">
+				File chỉ hỗ trợ định dạng <code>.xlsx</code>. Dữ liệu sẽ được preview trước, chưa ghi vào hệ
+				thống cho tới khi bạn xác nhận import.
+			</div>
+			<label class="block">
+				<span class="mb-1.5 block font-medium">File Excel *</span>
+				{#key importInputKey}
+					<input
+						type="file"
+						accept=".xlsx"
+						onchange={selectImportFile}
+						class="block w-full rounded-md border border-[var(--color-border-strong)] px-3 py-2 text-sm"
+					/>
+				{/key}
+			</label>
+			{#if importFile}
+				<p class="text-xs text-[var(--color-text-secondary)]">
+					Đã chọn: <span class="font-medium text-[var(--color-text)]">{importFile.name}</span>
+				</p>
+			{/if}
+		{:else if importPreview}
+			<div class="grid grid-cols-2 gap-3 text-xs">
+				<div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+					<p class="text-[var(--color-text-secondary)]">Tổng số dòng</p>
+					<p class="mt-1 text-lg font-semibold text-[var(--color-text)]">{importPreview.total_rows}</p>
+				</div>
+				<div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+					<p class="text-[var(--color-text-secondary)]">Hợp lệ</p>
+					<p class="mt-1 text-lg font-semibold text-[var(--color-text)]">{importPreview.valid_rows}</p>
+				</div>
+				<div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+					<p class="text-[var(--color-text-secondary)]">Sẽ tạo mới</p>
+					<p class="mt-1 font-semibold text-[var(--color-text)]">
+						{importPreview.create_area_count} khu · {importPreview.create_position_count} vị trí ·
+						{importPreview.create_tablet_count} bài vị
+					</p>
+				</div>
+				<div class="rounded-md bg-[var(--color-surface-muted)] p-3">
+					<p class="text-[var(--color-text-secondary)]">Dòng lỗi</p>
+					<p class="mt-1 text-lg font-semibold text-[var(--color-danger)]">{importPreview.invalid_rows}</p>
+				</div>
+			</div>
+			{#if importPreview.errors.length > 0}
+				<div class="rounded-md border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/5 p-3">
+					<p class="text-sm font-semibold text-[var(--color-danger)]">Các dòng cần sửa trước khi import</p>
+					<ul class="mt-2 max-h-44 space-y-2 overflow-y-auto pr-1 text-xs text-[var(--color-text-secondary)]">
+						{#each importPreview.errors as issue (`${issue.row_number}-${issue.message}`)}
+							<li>Dòng {issue.row_number}: {issue.message}</li>
+						{/each}
+					</ul>
+				</div>
+			{/if}
+		{/if}
+	</div>
+
+	{#snippet footer()}
+		<div class="grid grid-cols-2 gap-3">
+			<button
+				type="button"
+				class="h-11 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-sm font-semibold"
+				onclick={() => {
+					if (importStep === 'guide') closeImportPopup();
+					else if (importStep === 'upload') importStep = 'guide';
+					else importStep = 'upload';
+				}}
+			>
+				{importStep === 'guide' ? 'Đóng' : 'Quay lại'}
+			</button>
+			<button
+				type="button"
+				disabled={importBusy || (importStep === 'guide' && !importHouseId) || (importStep === 'upload' && !importFile) || (importStep === 'preview' && Boolean(importPreview?.invalid_rows))}
+				class="flex h-11 items-center justify-center gap-2 rounded-md bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50"
+				onclick={() => {
+					if (importStep === 'guide') continueImportGuide();
+					else if (importStep === 'upload') void requestSpiritImportPreview();
+					else void commitSpiritImport();
+				}}
+			>
+				{#if importBusy}
+					<span class="icon-[lucide--loader-circle] h-4 w-4 animate-spin" aria-hidden="true"></span>
+				{/if}
+				{importStep === 'guide'
+					? 'Tiếp tục'
+					: importStep === 'upload'
+						? 'Xem trước'
+						: importPreview?.invalid_rows
+							? 'Cần sửa file trước'
+							: 'Xác nhận import'}
+			</button>
+		</div>
+	{/snippet}
+</Popup>
+
+<Popup open={exportPopupOpen} title="Export Excel" onClose={closeExportPopup}>
+	<div class="space-y-3 text-sm">
+		<label class="flex items-start gap-3 rounded-md border border-[var(--color-border)] p-3">
+			<input
+				type="radio"
+				name="export-scope"
+				value="current"
+				checked={exportScope === 'current'}
+				onchange={() => (exportScope = 'current')}
+				class="mt-1"
+			/>
+			<span>
+				<span class="block font-medium">Xuất dữ liệu đang hiển thị</span>
+				<span class="mt-1 block text-xs text-[var(--color-text-secondary)]">
+					Áp dụng theo bộ lọc hiện tại: Nhà Linh, khu vực và từ khoá tìm kiếm.
+				</span>
+			</span>
+		</label>
+		<label class="flex items-start gap-3 rounded-md border border-[var(--color-border)] p-3">
+			<input
+				type="radio"
+				name="export-scope"
+				value="all"
+				checked={exportScope === 'all'}
+				onchange={() => (exportScope = 'all')}
+				class="mt-1"
+			/>
+			<span>
+				<span class="block font-medium">Xuất toàn bộ</span>
+				<span class="mt-1 block text-xs text-[var(--color-text-secondary)]">
+					Xuất toàn bộ Hương linh trong phạm vi bạn được phép xem.
+				</span>
+			</span>
+		</label>
+	</div>
+
+	{#snippet footer()}
+		<div class="grid grid-cols-2 gap-3">
+			<button
+				type="button"
+				class="h-11 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] text-sm font-semibold"
+				onclick={closeExportPopup}>Huỷ</button
+			>
+			<button
+				type="button"
+				disabled={exportBusy}
+				class="flex h-11 items-center justify-center gap-2 rounded-md bg-[var(--color-primary)] text-sm font-semibold text-white disabled:opacity-50"
+				onclick={() => void exportSpiritWorkbook()}
+			>
+				{#if exportBusy}
+					<span class="icon-[lucide--loader-circle] h-4 w-4 animate-spin" aria-hidden="true"></span>
+				{/if}
+				Tải file Excel
+			</button>
+		</div>
+	{/snippet}
+</Popup>
 
 {#if formOpen}<div
 		class="fixed inset-0 z-50 grid place-items-end bg-black/40 md:place-items-center"

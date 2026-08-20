@@ -1,4 +1,4 @@
-import { apiRequest } from '$lib/api/client';
+import { apiFetch, apiRequest } from '$lib/api/client';
 
 export type House = {
 	id: string;
@@ -111,6 +111,26 @@ export type SpiritInput = Pick<
 >;
 export type InlineSpiritInput = Omit<SpiritInput, 'house_id' | 'tablet_id'>;
 export type EditableSpiritInput = InlineSpiritInput & { id?: string };
+export type SpiritImportIssue = {
+	row_number: number;
+	message: string;
+};
+export type SpiritImportPreview = {
+	total_rows: number;
+	valid_rows: number;
+	invalid_rows: number;
+	create_area_count: number;
+	create_position_count: number;
+	create_tablet_count: number;
+	create_spirit_count: number;
+	errors: SpiritImportIssue[];
+};
+export type SpiritImportResult = {
+	created_area_count: number;
+	created_position_count: number;
+	created_tablet_count: number;
+	created_spirit_count: number;
+};
 
 export const listHouses = () => apiRequest<House[]>('/api/spirit-houses');
 export const createHouse = (input: { name: string; address: string; notes: string }) =>
@@ -264,3 +284,58 @@ export const patchSpirit = (id: string, field: string, value: string) =>
 	});
 export const deleteSpirit = (id: string) =>
 	apiRequest<void>(`/api/spirits/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export async function downloadSpiritImportTemplate() {
+	return apiBlob('/api/spirits/import-template.xlsx');
+}
+
+export async function previewSpiritImport(file: File, houseId: string) {
+	const body = new FormData();
+	body.set('house_id', houseId);
+	body.set('file', file);
+	return apiRequest<SpiritImportPreview>('/api/spirits/import-preview', {
+		method: 'POST',
+		body
+	});
+}
+
+export async function importSpiritsFromExcel(file: File, houseId: string) {
+	const body = new FormData();
+	body.set('house_id', houseId);
+	body.set('file', file);
+	return apiRequest<SpiritImportResult>('/api/spirits/import', {
+		method: 'POST',
+		body
+	});
+}
+
+export async function exportSpiritsExcel(
+	scope: 'current' | 'all',
+	filters: { query: string; houseId: string; areaId: string }
+) {
+	const params = new URLSearchParams({ scope });
+	if (scope === 'current') {
+		if (filters.query) params.set('q', filters.query);
+		if (filters.houseId) params.set('house_id', filters.houseId);
+		if (filters.areaId) params.set('area_id', filters.areaId);
+	}
+	return apiBlob(`/api/spirits/export.xlsx?${params.toString()}`);
+}
+
+async function apiBlob(path: string) {
+	const response = await apiFetch(path);
+	if (!response.ok) {
+		let message = `Yêu cầu thất bại (${response.status})`;
+		try {
+			const body = (await response.json()) as { error?: { message?: string } };
+			message = body.error?.message ?? message;
+		} catch {
+			// Keep fallback when response is not JSON.
+		}
+		throw new Error(message);
+	}
+	return {
+		blob: await response.blob(),
+		filename: response.headers.get('Content-Disposition')
+	};
+}

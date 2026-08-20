@@ -143,3 +143,23 @@ type PositionSearchOptions struct {
 	HouseID, Query string
 	Limit          int
 }
+type SpiritImportIssue struct {
+	RowNumber int    `json:"row_number"`
+	Message   string `json:"message"`
+}
+type SpiritImportPreview struct {
+	TotalRows           int                 `json:"total_rows"`
+	ValidRows           int                 `json:"valid_rows"`
+	InvalidRows         int                 `json:"invalid_rows"`
+	CreateAreaCount     int                 `json:"create_area_count"`
+	CreatePositionCount int                 `json:"create_position_count"`
+	CreateTabletCount   int                 `json:"create_tablet_count"`
+	CreateSpiritCount   int                 `json:"create_spirit_count"`
+	Errors              []SpiritImportIssue `json:"errors"`
+}
+type SpiritImportResult struct {
+	CreatedAreaCount     int `json:"created_area_count"`
+	CreatedPositionCount int `json:"created_position_count"`
+	CreatedTabletCount   int `json:"created_tablet_count"`
+	CreatedSpiritCount   int `json:"created_spirit_count"`
+}

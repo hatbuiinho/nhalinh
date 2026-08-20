@@ -25,7 +25,7 @@
 	const baseCellHeight = 96;
 
 	let heatFilter = $state<HeatFilter>('all');
-	let zoom = $state(1);
+	let zoom = $state(0.5);
 	let viewport = $state<HTMLDivElement | null>(null);
 	let panning = $state(false);
 	let panPointerId = $state<number | null>(null);
@@ -33,6 +33,8 @@
 	let panStartY = 0;
 	let panStartLeft = 0;
 	let panStartTop = 0;
+	let lastPointerX = $state<number | null>(null);
+	let lastPointerY = $state<number | null>(null);
 
 	let maxRow = $derived(Math.max(0, ...positions.map((position) => position.row_number)));
 	let maxColumn = $derived(Math.max(0, ...positions.map((position) => position.column_number)));
@@ -44,9 +46,10 @@
 			positions.map((position) => [`${position.row_number}:${position.column_number}`, position])
 		)
 	);
-	let labelWidth = $derived(Math.round(baseLabelWidth * zoom));
+	let labelWidth = $derived(Math.max(42, Math.round(baseLabelWidth * zoom)));
 	let cellWidth = $derived(Math.round(baseCellWidth * zoom));
 	let cellHeight = $derived(Math.round(baseCellHeight * zoom));
+	let gridGap = $derived(Math.max(2, Math.round(8 * zoom)));
 	let headerHeight = $derived(Math.max(28, Math.round(40 * zoom)));
 	let cellPadding = $derived(Math.max(6, Math.round(12 * zoom)));
 	let cellRadius = $derived(Math.max(8, Math.round(12 * zoom)));
@@ -73,18 +76,18 @@
 	}
 
 	function heatTone(position: Position) {
-		const readableText = 'text-slate-950 dark:text-slate-50';
+		const readableText = 'text-[var(--color-primary-dark)]';
 		switch (heatLevel(position)) {
 			case 'empty':
-				return `${readableText} border-slate-300 bg-slate-50 dark:border-slate-700 dark:bg-slate-900/40`;
+				return `${readableText} bg-[color-mix(in_srgb,var(--color-surface)_92%,var(--color-primary)_8%)]`;
 			case 'low':
-				return `${readableText} border-emerald-300 bg-emerald-50 dark:border-emerald-800 dark:bg-emerald-950/40`;
+				return `${readableText} bg-[color-mix(in_srgb,var(--color-surface)_78%,var(--color-primary)_22%)]`;
 			case 'medium':
-				return `${readableText} border-sky-300 bg-sky-50 dark:border-sky-800 dark:bg-sky-950/40`;
+				return `${readableText} bg-[color-mix(in_srgb,var(--color-surface)_62%,var(--color-primary)_38%)]`;
 			case 'high':
-				return `${readableText} border-amber-300 bg-amber-50 dark:border-amber-800 dark:bg-amber-950/40`;
+				return `text-white bg-[color-mix(in_srgb,var(--color-surface)_42%,var(--color-primary)_58%)]`;
 			case 'very-high':
-				return `${readableText} border-red-300 bg-red-50 dark:border-red-800 dark:bg-red-950/40`;
+				return `text-white bg-[color-mix(in_srgb,var(--color-surface)_18%,var(--color-primary)_82%)]`;
 		}
 	}
 
@@ -92,20 +95,38 @@
 		return heatFilter === 'all' || heatLevel(position) === heatFilter;
 	}
 
-	async function applyZoom(nextZoom: number) {
+	function pointerAnchor() {
+		if (
+			!viewport ||
+			lastPointerX === null ||
+			lastPointerY === null ||
+			lastPointerX < 0 ||
+			lastPointerY < 0 ||
+			lastPointerX > viewport.clientWidth ||
+			lastPointerY > viewport.clientHeight
+		) {
+			return {
+				x: viewport ? viewport.clientWidth / 2 : 0,
+				y: viewport ? viewport.clientHeight / 2 : 0
+			};
+		}
+		return { x: lastPointerX, y: lastPointerY };
+	}
+
+	async function applyZoom(nextZoom: number, anchor = pointerAnchor()) {
 		const targetZoom = clampZoom(nextZoom);
 		if (!viewport || targetZoom === zoom) {
 			zoom = targetZoom;
 			return;
 		}
 		const currentZoom = zoom;
-		const centerX = viewport.scrollLeft + viewport.clientWidth / 2;
-		const centerY = viewport.scrollTop + viewport.clientHeight / 2;
+		const contentX = viewport.scrollLeft + anchor.x;
+		const contentY = viewport.scrollTop + anchor.y;
 		zoom = targetZoom;
 		await tick();
 		const ratio = targetZoom / currentZoom;
-		viewport.scrollLeft = Math.max(0, centerX * ratio - viewport.clientWidth / 2);
-		viewport.scrollTop = Math.max(0, centerY * ratio - viewport.clientHeight / 2);
+		viewport.scrollLeft = Math.max(0, contentX * ratio - anchor.x);
+		viewport.scrollTop = Math.max(0, contentY * ratio - anchor.y);
 	}
 
 	function zoomIn() {
@@ -117,7 +138,7 @@
 	}
 
 	function resetView() {
-		void applyZoom(1);
+		void applyZoom(0.5);
 		if (viewport) {
 			viewport.scrollLeft = 0;
 			viewport.scrollTop = 0;
@@ -127,11 +148,19 @@
 	function handleWheel(event: WheelEvent) {
 		if (!event.ctrlKey && !event.metaKey) return;
 		event.preventDefault();
+		if (viewport) {
+			const bounds = viewport.getBoundingClientRect();
+			lastPointerX = event.clientX - bounds.left;
+			lastPointerY = event.clientY - bounds.top;
+		}
 		void applyZoom(zoom + (event.deltaY < 0 ? zoomStep : -zoomStep));
 	}
 
 	function startPan(event: PointerEvent) {
 		if (!viewport || event.button !== 0) return;
+		const bounds = viewport.getBoundingClientRect();
+		lastPointerX = event.clientX - bounds.left;
+		lastPointerY = event.clientY - bounds.top;
 		if (event.target instanceof HTMLElement) {
 			const interactive = event.target.closest('button, select, option, input, textarea, a');
 			if (interactive && interactive !== viewport) return;
@@ -146,12 +175,21 @@
 	}
 
 	function movePan(event: PointerEvent) {
-		if (!viewport || !panning || panPointerId !== event.pointerId) return;
+		if (!viewport) return;
+		const bounds = viewport.getBoundingClientRect();
+		lastPointerX = event.clientX - bounds.left;
+		lastPointerY = event.clientY - bounds.top;
+		if (!panning || panPointerId !== event.pointerId) return;
 		viewport.scrollLeft = panStartLeft - (event.clientX - panStartX);
 		viewport.scrollTop = panStartTop - (event.clientY - panStartY);
 	}
 
 	function stopPan(event?: PointerEvent) {
+		if (viewport && event) {
+			const bounds = viewport.getBoundingClientRect();
+			lastPointerX = event.clientX - bounds.left;
+			lastPointerY = event.clientY - bounds.top;
+		}
 		if (
 			viewport &&
 			event &&
@@ -183,11 +221,26 @@
 		</div>
 		<div class="flex flex-wrap items-center justify-end gap-3">
 			<div class="flex flex-wrap gap-3 text-xs">
-				{@render legend('Trống', 'bg-slate-400')}
-				{@render legend('Thấp', 'bg-emerald-400')}
-				{@render legend('Vừa', 'bg-sky-400')}
-				{@render legend('Cao', 'bg-amber-400')}
-				{@render legend('Rất cao', 'bg-red-400')}
+				{@render legend(
+					'Trống',
+					'bg-[color-mix(in_srgb,var(--color-surface)_92%,var(--color-primary)_8%)]'
+				)}
+				{@render legend(
+					'Thấp',
+					'bg-[color-mix(in_srgb,var(--color-surface)_78%,var(--color-primary)_22%)]'
+				)}
+				{@render legend(
+					'Vừa',
+					'bg-[color-mix(in_srgb,var(--color-surface)_62%,var(--color-primary)_38%)]'
+				)}
+				{@render legend(
+					'Cao',
+					'bg-[color-mix(in_srgb,var(--color-surface)_42%,var(--color-primary)_58%)]'
+				)}
+				{@render legend(
+					'Rất cao',
+					'bg-[color-mix(in_srgb,var(--color-surface)_18%,var(--color-primary)_82%)]'
+				)}
 			</div>
 			<select
 				bind:value={heatFilter}
@@ -251,11 +304,15 @@
 			onpointercancel={stopPan}
 			onpointerleave={(event) => {
 				if (panning) stopPan(event);
+				else {
+					lastPointerX = null;
+					lastPointerY = null;
+				}
 			}}
 		>
 			<div
-				class="grid min-w-max gap-2"
-				style={`grid-template-columns: ${labelWidth}px repeat(${maxColumn}, minmax(${cellWidth}px, 1fr));`}
+				class="grid min-w-max"
+				style={`grid-template-columns: ${labelWidth}px repeat(${maxColumn}, minmax(${cellWidth}px, 1fr)); gap: ${gridGap}px;`}
 			>
 				<div
 					class="sticky top-0 left-0 z-30 bg-[var(--color-surface)] shadow-[1px_1px_0_var(--color-border)]"
@@ -288,7 +345,7 @@
 								onclick={() => onposition(position)}
 								disabled={!matches(position)}
 								class={[
-									'border text-left transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-md disabled:cursor-default disabled:opacity-15',
+									'text-left transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-md disabled:cursor-default disabled:opacity-15',
 									heatTone(position)
 								]}
 								style={`min-height: ${cellHeight}px; padding: ${cellPadding}px; border-radius: ${cellRadius}px;`}
@@ -300,18 +357,18 @@
 									class="block leading-tight font-semibold"
 									style={`margin-top: ${titleGap}px; font-size: ${metricFontSize}px;`}
 								>
-									{position.tablet_count} bài vị
+									{position.tablet_count} BV
 								</span>
 								<span
 									class="block leading-tight opacity-75"
 									style={`margin-top: ${metricGap}px; font-size: ${metricFontSize}px;`}
 								>
-									{position.spirit_count} Hương linh
+									{position.spirit_count} HL
 								</span>
 							</button>
 						{:else}
 							<div
-								class="border border-dashed border-[var(--color-border)] bg-[var(--color-surface-muted)]/40"
+								class="bg-[color-mix(in_srgb,var(--color-surface)_94%,var(--color-primary)_6%)]"
 								style={`min-height: ${cellHeight}px; border-radius: ${cellRadius}px;`}
 							></div>
 						{/if}

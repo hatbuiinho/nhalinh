@@ -6,15 +6,23 @@ export function setAccessToken(token: string) {
 	accessToken = token;
 }
 
-export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
-	const response = await fetch(`${apiBaseURL()}${path}`, {
+export async function apiFetch(path: string, init: RequestInit = {}) {
+	const headers = new Headers(init.headers);
+	if (accessToken && !headers.has('Authorization')) {
+		headers.set('Authorization', `Bearer ${accessToken}`);
+	}
+	const body = init.body;
+	if (body !== undefined && !(body instanceof FormData) && !headers.has('Content-Type')) {
+		headers.set('Content-Type', 'application/json');
+	}
+	return fetch(`${apiBaseURL()}${path}`, {
 		...init,
-		headers: {
-			'Content-Type': 'application/json',
-			...(accessToken ? { Authorization: `Bearer ${accessToken}` } : {}),
-			...init.headers
-		}
+		headers
 	});
+}
+
+export async function apiRequest<T>(path: string, init: RequestInit = {}): Promise<T> {
+	const response = await apiFetch(path, init);
 
 	if (!response.ok) {
 		let message = `Yêu cầu thất bại (${response.status})`;
