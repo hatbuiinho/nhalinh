@@ -1,5 +1,5 @@
 services:
-  minhquang-migrate:
+  nhalinh-migrate:
     image: ${BACKEND_IMAGE:-minhquang-be:local}
     restart: "no"
     env_file:
@@ -8,15 +8,15 @@ services:
     networks:
       - nginx_network
 
-  minhquang-be:
+  nhalinh-be:
     image: ${BACKEND_IMAGE:-minhquang-be:local}
     build:
       context: .
       dockerfile: be/Dockerfile
-    container_name: minhquang-be
+    container_name: nhalinh-be
     restart: unless-stopped
     depends_on:
-      minhquang-migrate:
+      nhalinh-migrate:
         condition: service_completed_successfully
     env_file:
       - ${COMPOSE_ENV_FILE:-.env}
@@ -30,18 +30,18 @@ services:
     networks:
       - nginx_network
 
-  minhquang-fe:
+  nhalinh-fe:
     build:
       context: .
       dockerfile: fe/Dockerfile
       args:
         VITE_API_BASE_URL: ${PUBLIC_API_BASE_URL}
-    container_name: minhquang-fe
+    container_name: nhalinh-fe
     restart: unless-stopped
     expose:
       - "8080"
     healthcheck:
-      test: ["CMD", "wget", "-q", "--spider", "http://minhquang-be:8080/healthz"]
+      test: ["CMD", "wget", "-q", "--spider", "http://nhalinh-be:8080/healthz"]
       interval: 30s
       timeout: 5s
       start_period: 5s
