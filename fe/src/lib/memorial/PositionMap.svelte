@@ -19,7 +19,7 @@
 
 	const minZoom = 0.2;
 	const maxZoom = 1.0;
-	const zoomStep = 0.2;
+	const zoomStep = 0.05;
 	const baseLabelWidth = 56;
 	const baseCellWidth = 132;
 	const baseCellHeight = 96;
