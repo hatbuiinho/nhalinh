@@ -178,7 +178,7 @@ func (s *Service) preparePositions(ctx context.Context, actor Actor, inputs []Po
 		if in.RowNumber < 1 || in.ColumnNumber < 1 {
 			return nil, fmt.Errorf("%w: row %d: row_number and column_number must be positive", ErrInvalidInput, index+1)
 		}
-		name := fmt.Sprintf("%d%s-%d", in.RowNumber, strings.ToUpper(areaCode), in.ColumnNumber)
+		name := fmt.Sprintf("%d%s-%d", in.ColumnNumber, strings.ToUpper(areaCode), in.RowNumber)
 		positions = append(positions, Position{ID: newID("position"), AreaID: areaID, Name: name, RowNumber: in.RowNumber, ColumnNumber: in.ColumnNumber, Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now})
 	}
 	return positions, nil
@@ -205,7 +205,7 @@ func (s *Service) UpdatePosition(ctx context.Context, actor Actor, id string, in
 	if err != nil {
 		return Position{}, err
 	}
-	name := fmt.Sprintf("%d%s-%d", in.RowNumber, strings.ToUpper(areaCode), in.ColumnNumber)
+	name := fmt.Sprintf("%d%s-%d", in.ColumnNumber, strings.ToUpper(areaCode), in.RowNumber)
 	return s.store.UpdatePosition(ctx, Position{ID: id, AreaID: in.AreaID, Name: name, RowNumber: in.RowNumber, ColumnNumber: in.ColumnNumber, Notes: strings.TrimSpace(in.Notes), UpdatedAt: s.now().UTC()})
 }
 func (s *Service) ListTablets(ctx context.Context, actor Actor, positionID string) ([]Tablet, error) {

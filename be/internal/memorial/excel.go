@@ -347,7 +347,7 @@ func (s *Service) planSpiritImport(ctx context.Context, actor Actor, houseID str
 					AreaID:       area.ID,
 					RowNumber:    planned.rowNumber,
 					ColumnNumber: planned.columnNumber,
-					Name:         fmt.Sprintf("%d%s-%d", planned.rowNumber, planned.areaCode, planned.columnNumber),
+					Name:         fmt.Sprintf("%d%s-%d", planned.columnNumber, planned.areaCode, planned.rowNumber),
 				}
 				lookup.positionsByKey[positionKey] = position
 				preview.CreatePositionCount++
@@ -603,13 +603,13 @@ func parsePositionReference(raw string) (int, string, int, error) {
 	if len(matches) != 4 {
 		return 0, "", 0, fmt.Errorf("vị trí %q không đúng định dạng 38D-10", raw)
 	}
-	rowNumber, err := strconv.Atoi(matches[1])
-	if err != nil || rowNumber < 1 {
-		return 0, "", 0, fmt.Errorf("hàng trong vị trí %q không hợp lệ", raw)
-	}
-	columnNumber, err := strconv.Atoi(matches[3])
+	columnNumber, err := strconv.Atoi(matches[1])
 	if err != nil || columnNumber < 1 {
 		return 0, "", 0, fmt.Errorf("cột trong vị trí %q không hợp lệ", raw)
+	}
+	rowNumber, err := strconv.Atoi(matches[3])
+	if err != nil || rowNumber < 1 {
+		return 0, "", 0, fmt.Errorf("hàng trong vị trí %q không hợp lệ", raw)
 	}
 	return rowNumber, matches[2], columnNumber, nil
 }

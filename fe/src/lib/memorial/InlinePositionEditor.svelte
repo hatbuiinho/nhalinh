@@ -35,7 +35,7 @@
 	}
 	function displayName(position: EditablePositionRow) {
 		return position.row_number && position.column_number
-			? `${position.row_number}${areaCode}-${position.column_number}`
+			? `${position.column_number}${areaCode}-${position.row_number}`
 			: 'Vị trí mới';
 	}
 </script>
@@ -51,7 +51,7 @@
 						importSheet(event.clipboardData?.getData('text') ?? '');
 					}}
 					rows="2"
-					placeholder="Hàng | Cột | Ghi chú"
+					placeholder="Cột | Hàng | Ghi chú"
 					class="w-full rounded-md border-[var(--color-border-strong)] text-xs"></textarea></label
 			>
 			{#if sheetPaste.trim()}<button
@@ -85,8 +85,8 @@
 						>
 					</div>
 					<div class="grid gap-2 sm:grid-cols-3">
-						{@render field('Hàng *', position, 'row_number', required, 'number')}
 						{@render field('Cột *', position, 'column_number', required, 'number')}
+						{@render field('Hàng *', position, 'row_number', required, 'number')}
 						{@render field('Ghi chú', position, 'notes')}
 					</div>
 				</div>{/each}

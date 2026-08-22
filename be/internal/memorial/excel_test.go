@@ -49,7 +49,7 @@ func TestPreviewAndImportSpiritsAutoCreateMemorialStructure(t *testing.T) {
 		t.Fatalf("unexpected areas after import: %#v err=%v", areas, err)
 	}
 	positions, err := service.ListPositions(ctx, admin, areas[0].ID)
-	if err != nil || len(positions) != 1 || positions[0].Name != "38D-10" {
+	if err != nil || len(positions) != 1 || positions[0].Name != "38D-10" || positions[0].ColumnNumber != 38 || positions[0].RowNumber != 10 {
 		t.Fatalf("unexpected positions after import: %#v err=%v", positions, err)
 	}
 	tablets, err := service.ListTablets(ctx, admin, positions[0].ID)

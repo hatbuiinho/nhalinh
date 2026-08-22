@@ -891,8 +891,8 @@
 					Nơi an táng, Người gửi, Tháng gửi, Ghi chú, Vị trí, Bài vị.
 				</p>
 				<p class="mt-2">
-					Nếu vị trí có dạng như <code>38D-10</code>, hệ thống sẽ tự parse thành Khu D, hàng 38,
-					cột 10 và tự tạo Khu, Vị trí, Bài vị nếu chưa có.
+					Nếu vị trí có dạng như <code>38D-10</code>, hệ thống sẽ tự parse thành Khu D, cột 38,
+					hàng 10 và tự tạo Khu, Vị trí, Bài vị nếu chưa có.
 				</p>
 				<p class="mt-2">
 					Nếu cột Bài vị để trống thì hệ thống sẽ lấy tên Hương linh làm tên bài vị mặc định.
@@ -1144,7 +1144,7 @@
 									class="block w-full border-b border-[var(--color-border)] px-3 py-2 text-left text-sm last:border-b-0 hover:bg-[var(--color-primary-soft)]"
 									><strong>{position.name}</strong><span
 										class="ml-2 text-xs text-[var(--color-text-secondary)]"
-										>Khu {position.area_code} · hàng {position.row_number}, cột {position.column_number}
+										>Khu {position.area_code} · cột {position.column_number}, hàng {position.row_number}
 										·
 										{position.tablet_count} bài vị</span
 									></button

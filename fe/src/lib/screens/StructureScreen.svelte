@@ -62,7 +62,7 @@
 		drawerOpen = $state(false),
 		drawerLoading = $state(false),
 		positionQuery = $state(''),
-		positionSortKey = $state<PositionSortKey>('row_number'),
+		positionSortKey = $state<PositionSortKey>('column_number'),
 		positionSortDirection = $state<'asc' | 'desc'>('asc'),
 		positionView = $state<PositionView>('map'),
 		positionFullscreen = $state(false),
@@ -537,12 +537,12 @@
 											aria-sort={sortAria('name')}>{@render sortHeader('Tên vị trí', 'name')}</th
 										><th
 											class="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-4 py-3"
-											aria-sort={sortAria('row_number')}
-											>{@render sortHeader('Hàng', 'row_number', true)}</th
-										><th
-											class="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-4 py-3"
 											aria-sort={sortAria('column_number')}
 											>{@render sortHeader('Cột', 'column_number', true)}</th
+										><th
+											class="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-4 py-3"
+											aria-sort={sortAria('row_number')}
+											>{@render sortHeader('Hàng', 'row_number', true)}</th
 										><th
 											class="sticky top-0 z-10 bg-[var(--color-surface-muted)] px-4 py-3"
 											aria-sort={sortAria('tablet_count')}
@@ -567,8 +567,8 @@
 												>Khu {position.area_code}</td
 											><td class="px-4 py-3 font-semibold text-[var(--color-primary-dark)]"
 												>{position.name}</td
-											><td class="px-4 py-3 text-right">{position.row_number}</td><td
-												class="px-4 py-3 text-right">{position.column_number}</td
+											><td class="px-4 py-3 text-right">{position.column_number}</td><td
+												class="px-4 py-3 text-right">{position.row_number}</td
 											><td class="px-4 py-3 text-right">{position.tablet_count}</td><td
 												class="px-4 py-3 text-right">{position.spirit_count}</td
 											>{#if canWrite}<td class="px-4 py-2 text-right"
@@ -620,7 +620,7 @@
 						</p>
 						<h2 class="mt-1 text-lg font-semibold">Bài vị tại {selectedPosition?.name}</h2>
 						<p class="mt-1 text-xs text-[var(--color-text-secondary)]">
-							Hàng {selectedPosition?.row_number}, cột {selectedPosition?.column_number}
+							Cột {selectedPosition?.column_number}, hàng {selectedPosition?.row_number}
 						</p>
 					</div>
 					<button
@@ -728,22 +728,22 @@
 						>
 							Tên vị trí tự động:
 							<strong
-								>{positionForm.row_number}{areas.find((a) => a.id === areaId)?.code ??
-									''}-{positionForm.column_number}</strong
+											>{positionForm.column_number}{areas.find((a) => a.id === areaId)?.code ??
+													''}-{positionForm.row_number}</strong
 							>
 						</div>
 						<div class="grid grid-cols-2 gap-3">
 							<label
-								><span class="mb-1 block text-sm">Hàng *</span><input
-									bind:value={positionForm.row_number}
+								><span class="mb-1 block text-sm">Cột *</span><input
+									bind:value={positionForm.column_number}
 									type="number"
 									min="1"
 									required
 									class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
 								/></label
 							><label
-								><span class="mb-1 block text-sm">Cột *</span><input
-									bind:value={positionForm.column_number}
+								><span class="mb-1 block text-sm">Hàng *</span><input
+									bind:value={positionForm.row_number}
 									type="number"
 									min="1"
 									required

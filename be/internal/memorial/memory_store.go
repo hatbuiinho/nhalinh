@@ -158,10 +158,10 @@ func (s *MemoryStore) ListPositions(_ context.Context, _ Actor, areaID string) (
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {
-		if out[i].RowNumber == out[j].RowNumber {
-			return out[i].ColumnNumber < out[j].ColumnNumber
+		if out[i].ColumnNumber == out[j].ColumnNumber {
+			return out[i].RowNumber < out[j].RowNumber
 		}
-		return out[i].RowNumber < out[j].RowNumber
+		return out[i].ColumnNumber < out[j].ColumnNumber
 	})
 	return out, nil
 }
@@ -199,10 +199,10 @@ func (s *MemoryStore) SearchPositions(_ context.Context, _ Actor, o PositionSear
 		if leftExact != rightExact {
 			return leftExact
 		}
-		if out[i].RowNumber == out[j].RowNumber {
-			return out[i].ColumnNumber < out[j].ColumnNumber
+		if out[i].ColumnNumber == out[j].ColumnNumber {
+			return out[i].RowNumber < out[j].RowNumber
 		}
-		return out[i].RowNumber < out[j].RowNumber
+		return out[i].ColumnNumber < out[j].ColumnNumber
 	})
 	if len(out) > o.Limit {
 		out = out[:o.Limit]
@@ -245,10 +245,10 @@ func (s *MemoryStore) ListOccupancyPositions(_ context.Context, _ Actor, houseID
 		if out[i].AreaCode != out[j].AreaCode {
 			return out[i].AreaCode < out[j].AreaCode
 		}
-		if out[i].RowNumber != out[j].RowNumber {
-			return out[i].RowNumber < out[j].RowNumber
+		if out[i].ColumnNumber != out[j].ColumnNumber {
+			return out[i].ColumnNumber < out[j].ColumnNumber
 		}
-		return out[i].ColumnNumber < out[j].ColumnNumber
+		return out[i].RowNumber < out[j].RowNumber
 	})
 	return out, unplaced, nil
 }

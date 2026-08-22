@@ -78,12 +78,12 @@ paths:
       responses: { "201": { description: Vị trí đã tạo } }
   /api/memorial-positions/{id}:
     put:
-      summary: Sửa hàng, cột và ghi chú của vị trí; tên được tự tính lại
+      summary: Sửa cột, hàng và ghi chú của vị trí; tên tự tính theo CộtKhu-Hàng
       parameters: [{ name: id, in: path, required: true, schema: { type: string } }]
       responses: { "200": { description: Vị trí đã cập nhật } }
   /api/memorial-positions/batch:
     post:
-      summary: Tạo 1-500 vị trí trong cùng khu vực; tự bỏ qua hàng và cột đã tồn tại
+      summary: Tạo 1-500 vị trí trong cùng khu vực; tự bỏ qua cặp cột và hàng đã tồn tại
       responses: { "201": { description: Danh sách vị trí đã tạo và số dòng đã bỏ qua } }
   /api/memorial-occupancy:
     get:

@@ -6,7 +6,7 @@ export type EditablePositionRow = {
 	notes: string;
 };
 
-const columns: (keyof EditablePositionRow)[] = ['row_number', 'column_number', 'notes'];
+const columns: (keyof EditablePositionRow)[] = ['column_number', 'row_number', 'notes'];
 
 export function emptyPositionRow(): EditablePositionRow {
 	return { row_number: '', column_number: '', notes: '' };
@@ -21,17 +21,17 @@ export function parsePositionSheet(raw: string): EditablePositionRow[] {
 			throw new Error(`Dòng ${index + 1} có nhiều hơn ${columns.length} cột`);
 		const item = emptyPositionRow();
 		columns.forEach((key, column) => (item[key] = cells[column] ?? ''));
-		if (!isPositiveInteger(item.row_number))
-			throw new Error(`Dòng ${index + 1}: Hàng phải là số nguyên lớn hơn 0`);
 		if (!isPositiveInteger(item.column_number))
 			throw new Error(`Dòng ${index + 1}: Cột phải là số nguyên lớn hơn 0`);
+		if (!isPositiveInteger(item.row_number))
+			throw new Error(`Dòng ${index + 1}: Hàng phải là số nguyên lớn hơn 0`);
 		return item;
 	});
 }
 
 function isHeader(cells: string[]) {
 	const first = foldSheetText(cells[0] ?? '');
-	return first === 'hang' || first === 'row' || first === 'hang vi tri';
+	return first === 'cot' || first === 'column' || first === 'cot vi tri';
 }
 
 function isPositiveInteger(value: string) {

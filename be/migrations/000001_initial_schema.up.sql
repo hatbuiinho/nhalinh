@@ -94,7 +94,7 @@ CREATE TABLE memorial_tablets (
   UNIQUE (position_id, name)
 );
 
-CREATE INDEX idx_memorial_positions_area ON memorial_positions(area_id, row_number, column_number);
+CREATE INDEX idx_memorial_positions_area ON memorial_positions(area_id, column_number, row_number);
 CREATE INDEX idx_memorial_tablets_position ON memorial_tablets(position_id, name);
 
 CREATE TABLE spirits (
@@ -117,5 +117,5 @@ CREATE TABLE spirits (
 CREATE INDEX idx_spirits_tablet ON spirits(tablet_id, full_name);
 
 COMMENT ON COLUMN memorial_positions.area_id IS 'Khu vực của vị trí; Nhà Linh được xác định qua memorial_areas.house_id';
-COMMENT ON COLUMN memorial_positions.row_number IS 'Hàng của vị trí';
-COMMENT ON COLUMN memorial_positions.column_number IS 'Cột của vị trí';
+COMMENT ON COLUMN memorial_positions.row_number IS 'Hàng của vị trí (phần sau dấu gạch ngang trong tên)';
+COMMENT ON COLUMN memorial_positions.column_number IS 'Cột của vị trí (phần trước mã khu trong tên)';

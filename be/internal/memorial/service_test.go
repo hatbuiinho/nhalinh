@@ -24,15 +24,15 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if position.Name != "2A-1" {
+	if position.Name != "1A-2" {
 		t.Fatalf("unexpected generated position: %s", position.Name)
 	}
-	positionMatches, err := service.SearchPositions(ctx, viewer, PositionSearchOptions{HouseID: house.ID, Query: "2a1", Limit: 20})
+	positionMatches, err := service.SearchPositions(ctx, viewer, PositionSearchOptions{HouseID: house.ID, Query: "1a2", Limit: 20})
 	if err != nil || len(positionMatches) != 1 || positionMatches[0].ID != position.ID {
 		t.Fatalf("unexpected direct position search: items=%d err=%v", len(positionMatches), err)
 	}
 	position, err = service.UpdatePosition(ctx, admin, position.ID, PositionInput{AreaID: area.ID, RowNumber: 3, ColumnNumber: 2, Notes: "Đã sửa"})
-	if err != nil || position.Name != "3A-2" || position.Notes != "Đã sửa" {
+	if err != nil || position.Name != "2A-3" || position.Notes != "Đã sửa" {
 		t.Fatalf("unexpected updated position: %#v, err=%v", position, err)
 	}
 	if _, err = service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 4, ColumnNumber: 1}); err != nil {
@@ -69,7 +69,7 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	if !names["Nguyễn Văn An đã sửa"] || !names["Lê Văn Cường"] || names["Trần Thị Bình"] {
 		t.Fatalf("unexpected synchronized spirit list: %#v", names)
 	}
-	items, total, err := service.ListSpirits(ctx, viewer, SearchOptions{HouseID: house.ID, Query: "3a2", Limit: 20})
+	items, total, err := service.ListSpirits(ctx, viewer, SearchOptions{HouseID: house.ID, Query: "2a3", Limit: 20})
 	if err != nil || total != 2 || len(items) != 2 {
 		t.Fatalf("unexpected search: total=%d items=%d err=%v", total, len(items), err)
 	}
@@ -119,7 +119,7 @@ func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
 		{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1},
 		{AreaID: area.ID, RowNumber: 1, ColumnNumber: 2},
 	})
-	if err != nil || len(created) != 2 || created[0].Name != "1B-1" || created[1].Name != "1B-2" {
+	if err != nil || len(created) != 2 || created[0].Name != "1B-1" || created[1].Name != "2B-1" {
 		t.Fatalf("unexpected batch positions: %#v err=%v", created, err)
 	}
 	created, err = service.CreatePositions(ctx, admin, []PositionInput{
@@ -127,7 +127,7 @@ func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
 		{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1},
 		{AreaID: area.ID, RowNumber: 2, ColumnNumber: 1},
 	})
-	if err != nil || len(created) != 1 || created[0].Name != "2B-1" {
+	if err != nil || len(created) != 1 || created[0].Name != "1B-2" {
 		t.Fatalf("expected one new position and duplicates skipped: %#v err=%v", created, err)
 	}
 	positions, err := service.ListPositions(ctx, admin, area.ID)

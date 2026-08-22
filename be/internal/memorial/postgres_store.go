@@ -107,7 +107,7 @@ func (s *PostgresStore) AreaCode(ctx context.Context, id string) (string, error)
 	return code, mapErr(e)
 }
 func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string) ([]Position, error) {
-	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.row_number,p.column_number,p.name`, area)
+	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
 	if e != nil {
 		return nil, e
 	}
@@ -131,7 +131,7 @@ func (s *PostgresStore) SearchPositions(ctx context.Context, _ Actor, o Position
 		LEFT JOIN spirits s ON s.tablet_id=t.id
 		WHERE a.house_id=$1 AND ($2='' OR replace(unaccent(lower(concat_ws(' ',p.name,p.notes,a.code,h.name,p.row_number::text,p.column_number::text))),'-','') LIKE '%'||replace(unaccent(lower($2)),'-','')||'%')
 		GROUP BY p.id,a.id,h.id
-		ORDER BY CASE WHEN replace(lower(p.name),'-','')=replace(lower($2),'-','') THEN 0 ELSE 1 END,p.row_number,p.column_number,p.name
+		ORDER BY CASE WHEN replace(lower(p.name),'-','')=replace(lower($2),'-','') THEN 0 ELSE 1 END,p.column_number,p.row_number,p.name
 		LIMIT $3`, o.HouseID, o.Query, o.Limit)
 	if e != nil {
 		return nil, e
@@ -193,7 +193,7 @@ func (s *PostgresStore) ListOccupancyPositions(ctx context.Context, _ Actor, hou
 		JOIN spirit_houses h ON h.id=a.house_id
 		LEFT JOIN position_stats ps ON ps.position_id=p.id
 		WHERE h.id=$1
-		ORDER BY a.code,p.row_number,p.column_number,p.name`, houseID)
+		ORDER BY a.code,p.column_number,p.row_number,p.name`, houseID)
 	if err != nil {
 		return nil, 0, err
 	}
