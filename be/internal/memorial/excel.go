@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/xuri/excelize/v2"
 )
@@ -143,36 +144,78 @@ func (s *Service) ImportSpirits(ctx context.Context, actor Actor, houseID string
 	if plan.preview.InvalidRows > 0 {
 		return SpiritImportResult{}, fmt.Errorf("%w: %s", ErrInvalidInput, formatSpiritImportErrors(plan.preview))
 	}
+	if optimized, ok := s.store.(interface {
+		ImportSpiritsAtomic(context.Context, string, []spiritImportPlanRow, time.Time) (SpiritImportResult, error)
+	}); ok {
+		return optimized.ImportSpiritsAtomic(ctx, houseID, plan.rows, s.now().UTC())
+	}
 	lookup, err := s.loadMemorialLookup(ctx, actor, houseID)
 	if err != nil {
 		return SpiritImportResult{}, err
 	}
 	result := SpiritImportResult{}
+	for _, row := range plan.rows {
+		if row.hasPosition {
+			if _, created, err := s.ensureImportArea(ctx, actor, houseID, row.areaCode, &lookup); err != nil {
+				return SpiritImportResult{}, err
+			} else if created {
+				result.CreatedAreaCount++
+			}
+		}
+	}
+	positionsByArea := map[string][]Position{}
+	for _, row := range plan.rows {
+		if row.hasPosition {
+			area := lookup.areasByCode[row.areaCode]
+			key := memorialPositionKey(area.ID, row.rowNumber, row.columnNumber)
+			if _, ok := lookup.positionsByKey[key]; !ok {
+				lookup.positionsByKey[key] = Position{ID: newID("position"), AreaID: area.ID, RowNumber: row.rowNumber, ColumnNumber: row.columnNumber, Name: fmt.Sprintf("%d%s-%d", row.columnNumber, row.areaCode, row.rowNumber), CreatedAt: s.now().UTC(), UpdatedAt: s.now().UTC()}
+				positionsByArea[area.ID] = append(positionsByArea[area.ID], lookup.positionsByKey[key])
+			}
+		}
+	}
+	for _, positions := range positionsByArea {
+		created, err := s.store.CreatePositions(ctx, positions)
+		if err != nil {
+			return SpiritImportResult{}, err
+		}
+		result.CreatedPositionCount += len(created)
+	}
+	lookup, err = s.loadMemorialLookup(ctx, actor, houseID)
+	if err != nil {
+		return SpiritImportResult{}, err
+	}
+	newTablets := []Tablet{}
+	for _, row := range plan.rows {
+		if row.hasPosition {
+			area := lookup.areasByCode[row.areaCode]
+			position := lookup.positionsByKey[memorialPositionKey(area.ID, row.rowNumber, row.columnNumber)]
+			key := memorialTabletKey(position.ID, row.tabletName)
+			if _, ok := lookup.tabletsByKey[key]; !ok {
+				t := Tablet{ID: newID("tablet"), PositionID: position.ID, Name: row.tabletName, CreatedAt: s.now().UTC(), UpdatedAt: s.now().UTC()}
+				lookup.tabletsByKey[key] = t
+				newTablets = append(newTablets, t)
+			}
+		}
+	}
+	if len(newTablets) > 0 {
+		created, err := s.store.CreateTablets(ctx, newTablets)
+		if err != nil {
+			return SpiritImportResult{}, err
+		}
+		result.CreatedTabletCount = len(created)
+	}
+	lookup, err = s.loadMemorialLookup(ctx, actor, houseID)
+	if err != nil {
+		return SpiritImportResult{}, err
+	}
 	inputs := make([]SpiritInput, 0, len(plan.rows))
 	for _, row := range plan.rows {
 		input := row.input
 		if row.hasPosition {
-			area, created, err := s.ensureImportArea(ctx, actor, houseID, row.areaCode, &lookup)
-			if err != nil {
-				return SpiritImportResult{}, err
-			}
-			if created {
-				result.CreatedAreaCount++
-			}
-			position, created, err := s.ensureImportPosition(ctx, actor, area, row.rowNumber, row.columnNumber, &lookup)
-			if err != nil {
-				return SpiritImportResult{}, err
-			}
-			if created {
-				result.CreatedPositionCount++
-			}
-			tablet, created, err := s.ensureImportTablet(ctx, position, row.tabletName, &lookup)
-			if err != nil {
-				return SpiritImportResult{}, err
-			}
-			if created {
-				result.CreatedTabletCount++
-			}
+			area := lookup.areasByCode[row.areaCode]
+			position := lookup.positionsByKey[memorialPositionKey(area.ID, row.rowNumber, row.columnNumber)]
+			tablet := lookup.tabletsByKey[memorialTabletKey(position.ID, row.tabletName)]
 			input.TabletID = tablet.ID
 		}
 		inputs = append(inputs, input)
@@ -325,7 +368,7 @@ func (s *Service) planSpiritImport(ctx context.Context, actor Actor, houseID str
 	if err != nil {
 		return spiritImportPlan{}, err
 	}
-	preview := SpiritImportPreview{TotalRows: len(rows)}
+	preview := SpiritImportPreview{TotalRows: len(rows), Errors: []SpiritImportIssue{}}
 	plannedRows := make([]spiritImportPlanRow, 0, len(rows))
 	for _, row := range rows {
 		planned, rowErr := buildSpiritImportPlanRow(houseID, row)
@@ -409,6 +452,25 @@ func buildSpiritImportPlanRow(houseID string, row spiritImportRow) (spiritImport
 }
 
 func (s *Service) loadMemorialLookup(ctx context.Context, actor Actor, houseID string) (memorialLookup, error) {
+	if optimized, ok := s.store.(interface {
+		ImportLookup(context.Context, string) ([]Area, []Position, []Tablet, error)
+	}); ok {
+		areas, positions, tablets, err := optimized.ImportLookup(ctx, houseID)
+		if err != nil {
+			return memorialLookup{}, err
+		}
+		lookup := memorialLookup{areasByCode: map[string]Area{}, positionsByKey: map[string]Position{}, tabletsByKey: map[string]Tablet{}}
+		for _, area := range areas {
+			lookup.areasByCode[strings.ToUpper(strings.TrimSpace(area.Code))] = area
+		}
+		for _, position := range positions {
+			lookup.positionsByKey[memorialPositionKey(position.AreaID, position.RowNumber, position.ColumnNumber)] = position
+		}
+		for _, tablet := range tablets {
+			lookup.tabletsByKey[memorialTabletKey(tablet.PositionID, tablet.Name)] = tablet
+		}
+		return lookup, nil
+	}
 	areas, err := s.ListAreas(ctx, actor, houseID)
 	if err != nil {
 		return memorialLookup{}, err

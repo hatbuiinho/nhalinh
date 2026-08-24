@@ -3,6 +3,7 @@ package memorial
 import (
 	"context"
 	"errors"
+	"fmt"
 	"testing"
 	"time"
 )
@@ -94,11 +95,20 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	if _, err = service.PatchSpirit(ctx, admin, batch[0].ID, "image_url", "forbidden"); !errors.Is(err, ErrInvalidInput) {
 		t.Fatalf("image_url patch should be rejected, got %v", err)
 	}
+	if err = service.BulkPatchSpirits(ctx, admin, []string{batch[0].ID, batch[1].ID}, "sender", "Gia đình chung"); err != nil {
+		t.Fatal(err)
+	}
+	if err = service.BulkDeleteSpirits(ctx, admin, []string{batch[1].ID}); err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.GetSpirit(ctx, admin, batch[1].ID); !errors.Is(err, ErrNotFound) {
+		t.Fatalf("soft-deleted spirit must be hidden, got %v", err)
+	}
 	occupancy, err := service.Occupancy(ctx, viewer, house.ID)
 	if err != nil {
 		t.Fatal(err)
 	}
-	if occupancy.Summary.PositionCount != 2 || occupancy.Summary.EmptyPositionCount != 1 || occupancy.Summary.TabletCount != 1 || occupancy.Summary.SpiritCount != 5 || occupancy.Summary.UnplacedSpiritCount != 3 {
+	if occupancy.Summary.PositionCount != 2 || occupancy.Summary.EmptyPositionCount != 1 || occupancy.Summary.TabletCount != 1 || occupancy.Summary.SpiritCount != 4 || occupancy.Summary.UnplacedSpiritCount != 2 {
 		t.Fatalf("unexpected occupancy summary: %#v", occupancy.Summary)
 	}
 }
@@ -133,6 +143,37 @@ func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
 	positions, err := service.ListPositions(ctx, admin, area.ID)
 	if err != nil || len(positions) != 3 {
 		t.Fatalf("unexpected positions after skipped duplicates: items=%d err=%v", len(positions), err)
+	}
+}
+
+func TestBulkDeleteSpiritsHasNoSelectionLimit(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh xóa hàng loạt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	ids := make([]string, 0, 1000)
+	for batch := 0; batch < 2; batch++ {
+		inputs := make([]SpiritInput, 0, 500)
+		for index := 0; index < 500; index++ {
+			inputs = append(inputs, SpiritInput{HouseID: house.ID, FullName: fmt.Sprintf("Hương linh %d", batch*500+index)})
+		}
+		created, err := service.CreateSpirits(ctx, admin, inputs)
+		if err != nil {
+			t.Fatal(err)
+		}
+		for _, spirit := range created {
+			ids = append(ids, spirit.ID)
+		}
+	}
+	if err := service.BulkDeleteSpirits(ctx, admin, ids); err != nil {
+		t.Fatalf("bulk delete 1000 spirits: %v", err)
+	}
+	items, total, err := service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, Limit: 20})
+	if err != nil || total != 0 || len(items) != 0 {
+		t.Fatalf("expected all spirits to be hidden, items=%d total=%d err=%v", len(items), total, err)
 	}
 }
 

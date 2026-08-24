@@ -443,6 +443,63 @@ func (s *Service) DeleteSpirit(ctx context.Context, actor Actor, id string) erro
 	}
 	return s.store.DeleteSpirit(ctx, id)
 }
+func (s *Service) BulkPatchSpirits(ctx context.Context, actor Actor, ids []string, field, value string) error {
+	ids, err := s.authorizeBulkSpirits(ctx, actor, ids, 100)
+	if err != nil {
+		return err
+	}
+	allowed := map[string]bool{"full_name": true, "dharma_name": true, "birth_year": true, "death_year": true, "age": true, "burial_place": true, "sender": true, "sent_month": true, "notes": true}
+	if !allowed[field] {
+		return fmt.Errorf("%w: field cannot be patched", ErrInvalidInput)
+	}
+	value = strings.TrimSpace(value)
+	if field == "full_name" && value == "" {
+		return fmt.Errorf("%w: full_name is required", ErrInvalidInput)
+	}
+	return s.store.BulkPatchSpirits(ctx, ids, field, value, s.now().UTC())
+}
+func (s *Service) BulkDeleteSpirits(ctx context.Context, actor Actor, ids []string) error {
+	ids, err := s.authorizeBulkSpirits(ctx, actor, ids, 0)
+	if err != nil {
+		return err
+	}
+	return s.store.SoftDeleteSpirits(ctx, ids, s.now().UTC())
+}
+func (s *Service) authorizeBulkSpirits(ctx context.Context, actor Actor, ids []string, maxItems int) ([]string, error) {
+	if len(ids) == 0 || (maxItems > 0 && len(ids) > maxItems) {
+		if maxItems > 0 {
+			return nil, fmt.Errorf("%w: select between 1 and %d spirits", ErrInvalidInput, maxItems)
+		}
+		return nil, fmt.Errorf("%w: select at least one spirit", ErrInvalidInput)
+	}
+	seen := make(map[string]bool, len(ids))
+	normalizedIDs := make([]string, 0, len(ids))
+	for _, rawID := range ids {
+		id := strings.TrimSpace(rawID)
+		if id == "" || seen[id] {
+			return nil, fmt.Errorf("%w: spirit ids must be unique and non-empty", ErrInvalidInput)
+		}
+		seen[id] = true
+		normalizedIDs = append(normalizedIDs, id)
+	}
+	housesBySpirit, err := s.store.HouseIDsForSpirits(ctx, normalizedIDs)
+	if err != nil {
+		return nil, err
+	}
+	if len(housesBySpirit) != len(normalizedIDs) {
+		return nil, ErrNotFound
+	}
+	uniqueHouses := make(map[string]struct{}, len(housesBySpirit))
+	for _, houseID := range housesBySpirit {
+		uniqueHouses[houseID] = struct{}{}
+	}
+	for houseID := range uniqueHouses {
+		if err := s.requireWrite(ctx, actor, houseID); err != nil {
+			return nil, err
+		}
+	}
+	return normalizedIDs, nil
+}
 func (s *Service) normalizeSpirit(in SpiritInput) (Spirit, error) {
 	in.FullName = strings.TrimSpace(in.FullName)
 	if in.FullName == "" || strings.TrimSpace(in.HouseID) == "" {

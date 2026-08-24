@@ -8,10 +8,13 @@
 	import Popup from '$lib/ui/Popup.svelte';
 	import InlineSpiritEditor from '$lib/memorial/InlineSpiritEditor.svelte';
 	import SpiritImageUploader from '$lib/memorial/SpiritImageUploader.svelte';
+	import SpiritPortrait from '$lib/memorial/SpiritPortrait.svelte';
 	import { uploadSpiritImage } from '$lib/uploads/api';
 	import {
 		createTablet,
 		createSpirits,
+		bulkDeleteSpirits,
+		bulkPatchSpirits,
 		deleteSpirit,
 		downloadSpiritImportTemplate,
 		exportSpiritsExcel,
@@ -115,6 +118,8 @@
 		query = $state(''),
 		total = $state(0),
 		loading = $state(true),
+		loadingMore = $state(false),
+		hasMore = $state(false),
 		saving = $state(false),
 		imageUploading = $state(false),
 		positionLoading = $state(false),
@@ -137,6 +142,12 @@
 		exportBusy = $state(false),
 		inlineEditorBusy = $state(false),
 		patchSaving = $state(false),
+		bulkActionOpen = $state(false),
+		bulkPatchOpen = $state(false),
+		bulkDeleteOpen = $state(false),
+		bulkBusy = $state(false),
+		bulkField = $state<EditablePatchKey>('sender'),
+		bulkValue = $state(''),
 		formOpen = $state(false),
 		editing = $state<Spirit | null>(null),
 		formHouseId = $state(''),
@@ -157,6 +168,8 @@
 	let cellEdit = $state<{ id: string; key: EditablePatchKey; label: string; value: string } | null>(
 		null
 	);
+	let selectedSpiritIDs = $state<Set<string>>(new Set());
+	let deleteConfirmation = $state('');
 	let selectedHouse = $derived(houses.find((v) => v.id === houseId));
 	let canWrite = $derived(
 		authStore.user?.role === 'admin' || selectedHouse?.access_role === 'editor'
@@ -171,13 +184,16 @@
 			return (result || vietnameseCollator.compare(left.full_name, right.full_name)) * direction;
 		});
 	});
+	let selectedCount = $derived(selectedSpiritIDs.size);
 
 	onMount(() => {
 		restoreTablePreferences();
 		document.addEventListener('pointerdown', dismissCellEditOnOutsideClick);
+		document.addEventListener('pointerdown', dismissBulkActionsOnOutsideClick);
 		void initialize();
 		return () => {
 			document.removeEventListener('pointerdown', dismissCellEditOnOutsideClick);
+			document.removeEventListener('pointerdown', dismissBulkActionsOnOutsideClick);
 			if (timer) clearTimeout(timer);
 			if (positionTimer) clearTimeout(positionTimer);
 		};
@@ -185,6 +201,11 @@
 	function dismissCellEditOnOutsideClick(event: PointerEvent) {
 		if (cellEdit && event.target instanceof Node && !cellEditRoot?.contains(event.target)) {
 			cellEdit = null;
+		}
+	}
+	function dismissBulkActionsOnOutsideClick(event: PointerEvent) {
+		if (bulkActionOpen && event.target instanceof Element && !event.target.closest('[data-bulk-actions]')) {
+			bulkActionOpen = false;
 		}
 	}
 	function restoreTablePreferences() {
@@ -294,6 +315,23 @@
 		const page = await listSpirits(query, houseId, areaId);
 		spirits = page.spirits;
 		total = page.total;
+		hasMore = page.has_more;
+		selectedSpiritIDs = new Set();
+		bulkActionOpen = false;
+	}
+	async function loadMore() {
+		if (loadingMore || !hasMore) return;
+		loadingMore = true;
+		try {
+			const page = await listSpirits(query, houseId, areaId, 100, spirits.length);
+			const known = new Set(spirits.map((item) => item.id));
+			spirits = [...spirits, ...page.spirits.filter((item) => !known.has(item.id))];
+			hasMore = page.has_more;
+		} catch (e) {
+			toastStore.error(message(e));
+		} finally {
+			loadingMore = false;
+		}
 	}
 	function search() {
 		if (timer) clearTimeout(timer);
@@ -646,8 +684,8 @@
 	}
 	async function remove(item: Spirit) {
 		const ok = await popupStore.confirm({
-			title: 'Xoá Hương linh?',
-			message: `Thông tin của ${item.full_name} sẽ bị xoá vĩnh viễn.`,
+			title: 'Ẩn Hương linh?',
+			message: `Thông tin của ${item.full_name} sẽ được xóa mềm và không còn xuất hiện trong danh sách.`,
 			confirmLabel: 'Xoá',
 			tone: 'danger'
 		});
@@ -658,6 +696,52 @@
 			await load();
 		} catch (e) {
 			toastStore.error(message(e));
+		}
+	}
+	function toggleSpiritSelection(id: string) {
+		const next = new Set(selectedSpiritIDs);
+		next.has(id) ? next.delete(id) : next.add(id);
+		selectedSpiritIDs = next;
+	}
+	function toggleVisibleSelection() {
+		const ids = spirits.map((item) => item.id);
+		const allSelected = ids.length > 0 && ids.every((id) => selectedSpiritIDs.has(id));
+		selectedSpiritIDs = allSelected ? new Set() : new Set(ids);
+	}
+	function clearSpiritSelection() {
+		selectedSpiritIDs = new Set();
+		bulkActionOpen = false;
+	}
+	function selectAllVisibleSpirits() {
+		selectedSpiritIDs = new Set(spirits.map((item) => item.id));
+	}
+	async function applyBulkPatch() {
+		bulkBusy = true;
+		try {
+			await bulkPatchSpirits([...selectedSpiritIDs], bulkField, bulkValue);
+			toastStore.success(`Đã cập nhật ${selectedCount} Hương linh`);
+			bulkPatchOpen = false;
+			clearSpiritSelection();
+			await load();
+		} catch (e) {
+			toastStore.error(message(e));
+		} finally {
+			bulkBusy = false;
+		}
+	}
+	async function applyBulkDelete() {
+		bulkBusy = true;
+		try {
+			await bulkDeleteSpirits([...selectedSpiritIDs]);
+			toastStore.success(`Đã xóa mềm ${selectedCount} Hương linh`);
+			bulkDeleteOpen = false;
+			deleteConfirmation = '';
+			clearSpiritSelection();
+			await load();
+		} catch (e) {
+			toastStore.error(message(e));
+		} finally {
+			bulkBusy = false;
 		}
 	}
 	function emptyForm(): SpiritInput {
@@ -691,6 +775,18 @@
 		}
 		if (exportPopupOpen && !exportBusy) {
 			closeExportPopup();
+			return;
+		}
+		if (bulkActionOpen) {
+			bulkActionOpen = false;
+			return;
+		}
+		if (bulkPatchOpen && !bulkBusy) {
+			bulkPatchOpen = false;
+			return;
+		}
+		if (bulkDeleteOpen && !bulkBusy) {
+			bulkDeleteOpen = false;
 			return;
 		}
 		if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
@@ -758,6 +854,16 @@
 					{total} Hương linh{selectedHouse ? ` · ${selectedHouse.name}` : ''}
 				</p>
 				<div class="flex items-center gap-2">
+					{#if canWrite && spirits.length > 0 && selectedCount === 0}<button type="button" onclick={selectAllVisibleSpirits} class="h-9 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs font-semibold hover:bg-[var(--color-surface-muted)]">Chọn tất cả</button>{/if}
+					{#if canWrite && selectedCount > 0}<div class="relative" data-bulk-actions>
+						<button type="button" onclick={() => (bulkActionOpen = !bulkActionOpen)} class="h-9 rounded-md bg-[var(--color-primary)] px-3 text-xs font-semibold text-white">
+							Đã chọn {selectedCount} · Thao tác
+						</button>
+						{#if bulkActionOpen}<div class="absolute top-full right-0 z-30 mt-1 w-48 rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-1 shadow-[var(--shadow-popover)]">
+							<button type="button" onclick={() => { bulkActionOpen = false; bulkPatchOpen = true; }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm hover:bg-[var(--color-surface-muted)]"><span class="icon-[lucide--pencil-line] h-4 w-4"></span>Cập nhật thông tin</button>
+							<button type="button" onclick={() => { bulkActionOpen = false; bulkDeleteOpen = true; deleteConfirmation = ''; }} class="flex w-full items-center gap-2 rounded px-3 py-2 text-left text-sm text-[var(--color-danger)] hover:bg-[var(--color-danger-soft)]"><span class="icon-[lucide--trash-2] h-4 w-4"></span>Xóa Hương linh</button>
+						</div>{/if}
+					</div><button type="button" onclick={clearSpiritSelection} class="h-9 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 text-xs font-semibold">Bỏ chọn</button>{/if}
 					<button
 						type="button"
 						onclick={openExportPopup}
@@ -848,12 +954,14 @@
 					<ul class="grid gap-3">
 						{#each spirits as item (item.id)}{@render spiritCard(item)}{/each}
 					</ul>
+					{@render loadMoreButton()}
 				</div>
 				{@render spiritTable()}
 			{:else}<div class="min-h-0 flex-1 overflow-y-auto">
 					<ul class="grid gap-3 md:grid-cols-2 xl:grid-cols-3">
 						{#each spirits as item (item.id)}{@render spiritCard(item)}{/each}
 					</ul>
+					{@render loadMoreButton()}
 				</div>{/if}
 		</div>
 	</div>
@@ -948,11 +1056,11 @@
 					<p class="mt-1 text-lg font-semibold text-[var(--color-danger)]">{importPreview.invalid_rows}</p>
 				</div>
 			</div>
-			{#if importPreview.errors.length > 0}
+				{#if (importPreview.errors ?? []).length > 0}
 				<div class="rounded-md border border-[var(--color-danger)]/30 bg-[var(--color-danger)]/5 p-3">
 					<p class="text-sm font-semibold text-[var(--color-danger)]">Các dòng cần sửa trước khi import</p>
 					<ul class="mt-2 max-h-44 space-y-2 overflow-y-auto pr-1 text-xs text-[var(--color-text-secondary)]">
-						{#each importPreview.errors as issue (`${issue.row_number}-${issue.message}`)}
+						{#each importPreview.errors ?? [] as issue (`${issue.row_number}-${issue.message}`)}
 							<li>Dòng {issue.row_number}: {issue.message}</li>
 						{/each}
 					</ul>
@@ -1055,6 +1163,20 @@
 			</button>
 		</div>
 	{/snippet}
+</Popup>
+
+<Popup open={bulkPatchOpen} title={`Cập nhật ${selectedCount} Hương linh`} onClose={() => !bulkBusy && (bulkPatchOpen = false)}>
+	<div class="space-y-3 text-sm">
+		<p class="text-[var(--color-text-secondary)]">Chỉ field được chọn sẽ được cập nhật. Để trống giá trị nếu muốn xóa nội dung field đó.</p>
+		<label class="block"><span class="mb-1 block font-medium">Field</span><select bind:value={bulkField} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="dharma_name">Pháp danh</option><option value="birth_year">Năm sinh</option><option value="death_year">Năm mất</option><option value="age">Tuổi</option><option value="burial_place">Nơi an táng</option><option value="sender">Người gửi</option><option value="sent_month">Tháng gửi</option><option value="notes">Ghi chú</option></select></label>
+		<label class="block"><span class="mb-1 block font-medium">Giá trị mới</span><input bind:value={bulkValue} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label>
+	</div>
+	{#snippet footer()}<div class="grid grid-cols-2 gap-3"><button type="button" onclick={() => (bulkPatchOpen = false)} class="h-10 rounded-md border border-[var(--color-border-strong)] font-semibold">Huỷ</button><button type="button" disabled={bulkBusy} onclick={() => void applyBulkPatch()} class="h-10 rounded-md bg-[var(--color-primary)] font-semibold text-white disabled:opacity-50">{bulkBusy ? 'Đang cập nhật...' : 'Cập nhật'}</button></div>{/snippet}
+</Popup>
+
+<Popup open={bulkDeleteOpen} title={`Xóa mềm ${selectedCount} Hương linh`} onClose={() => !bulkBusy && (bulkDeleteOpen = false)}>
+	<div class="space-y-3 text-sm"><div class="rounded-md bg-[var(--color-danger-soft)] p-3 text-[var(--color-danger)]">Các Hương linh này sẽ được ẩn khỏi toàn bộ danh sách, tìm kiếm, thống kê và export. Dữ liệu vẫn được lưu để có thể khôi phục về sau.</div>{#if selectedCount > 1}<label class="block"><span class="mb-1 block font-medium">Nhập <strong>XÓA</strong> để xác nhận</span><input bind:value={deleteConfirmation} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label>{/if}</div>
+	{#snippet footer()}<div class="grid grid-cols-2 gap-3"><button type="button" onclick={() => (bulkDeleteOpen = false)} class="h-10 rounded-md border border-[var(--color-border-strong)] font-semibold">Huỷ</button><button type="button" disabled={bulkBusy || (selectedCount > 1 && deleteConfirmation !== 'XÓA')} onclick={() => void applyBulkDelete()} class="h-10 rounded-md bg-[var(--color-danger)] font-semibold text-white disabled:opacity-50">{bulkBusy ? 'Đang xóa...' : 'Xác nhận xóa'}</button></div>{/snippet}
 </Popup>
 
 {#if formOpen}<div
@@ -1179,7 +1301,8 @@
 					)}{@render field('Tuổi', 'age')}{@render field('Tháng gửi', 'sent_month')}{@render field(
 						'Nơi an táng',
 						'burial_place'
-					)}{@render field('Người gửi', 'sender')}<label class="md:col-span-2"
+					)}{@render field('Người gửi', 'sender')}
+					><label class="md:col-span-2"
 						><span class="mb-1 block text-sm font-medium">Ghi chú</span><textarea
 							bind:value={form.notes}
 							rows="3"
@@ -1242,20 +1365,14 @@
 		class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4"
 	>
 		<div class="flex gap-3">
-			{#if item.image_url}<button
+			{#if canWrite}<input type="checkbox" checked={selectedSpiritIDs.has(item.id)} onchange={() => toggleSpiritSelection(item.id)} aria-label={`Chọn ${item.full_name}`} class="mt-1 h-4 w-4 shrink-0 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" />{/if}
+			<button
 					type="button"
 					onclick={() => openSpiritImage(item)}
-					class="shrink-0 rounded-md focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+					disabled={!item.image_url}
+					class="shrink-0 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)] disabled:cursor-default"
 					aria-label={`Xem ảnh ${item.full_name}`}
-					><img
-						src={item.image_url}
-						alt={item.full_name}
-						class="h-20 w-15 rounded-md object-cover"
-					/></button
-				>{:else}<span
-					class="grid h-20 w-15 shrink-0 place-items-center rounded-md bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary-dark)]"
-					>{item.full_name.slice(0, 1)}</span
-				>{/if}
+					><SpiritPortrait imageUrl={item.image_url} alt={item.full_name} sizeClass="h-20 w-15" /></button>
 			<div class="min-w-0 flex-1">
 				<h3 class="truncate font-semibold">{item.full_name}</h3>
 				<p class="truncate text-sm text-[var(--color-text-secondary)]">
@@ -1299,6 +1416,7 @@
 		<table class="min-w-[2480px] table-fixed text-left text-xs">
 			<thead class="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]">
 				<tr>
+					{#if canWrite}<th class="sticky top-0 z-10 w-10 bg-[var(--color-surface-muted)] px-3 py-3"><input type="checkbox" checked={spirits.length > 0 && spirits.every((item) => selectedSpiritIDs.has(item.id))} onchange={toggleVisibleSelection} aria-label="Chọn tất cả Hương linh đang hiển thị" class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" /></th>{/if}
 					{#each spiritColumns as column (column.key)}<th
 							class={`${column.width} sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-3`}
 						>
@@ -1312,22 +1430,16 @@
 			</thead>
 			<tbody class="divide-y divide-[var(--color-border)]">
 				{#each sortedSpirits as item (item.id)}<tr class="hover:bg-[var(--color-primary-soft)]/40">
+						{#if canWrite}<td class="px-3 py-2 align-middle"><input type="checkbox" checked={selectedSpiritIDs.has(item.id)} onchange={() => toggleSpiritSelection(item.id)} aria-label={`Chọn ${item.full_name}`} class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" /></td>{/if}
 						{#each spiritColumns as column (column.key)}<td class="relative px-3 py-2 align-middle">
 								{#if column.key === 'image_url'}
-									{#if item.image_url}<button
+									<button
 											type="button"
 											onclick={() => openSpiritImage(item)}
-											class="cursor-pointer rounded focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
+											disabled={!item.image_url}
+											class="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)] disabled:cursor-default"
 											aria-label={`Xem ảnh ${item.full_name}`}
-											><img
-												src={item.image_url}
-												alt={item.full_name}
-												class="h-14 w-10 rounded object-cover"
-											/></button
-										>{:else}<span
-											class="grid h-14 w-10 place-items-center rounded bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary-dark)]"
-											>{item.full_name.slice(0, 1)}</span
-										>{/if}
+											><SpiritPortrait imageUrl={item.image_url} alt={item.full_name} sizeClass="h-14 w-10" showErrorAlt /></button>
 								{:else if column.key === 'created_at' || column.key === 'updated_at'}<span
 										class="whitespace-nowrap">{formatTimestamp(item[column.key])}</span
 									>{:else if canWrite && editablePatchKeys.has(column.key)}<button
@@ -1397,7 +1509,10 @@
 					</tr>{/each}
 			</tbody>
 		</table>
+		{@render loadMoreButton()}
 	</div>{/snippet}
+
+{#snippet loadMoreButton()}{#if hasMore}<div class="flex justify-center py-4"><button type="button" disabled={loadingMore} onclick={() => void loadMore()} class="h-10 rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-4 text-sm font-semibold hover:bg-[var(--color-surface-muted)] disabled:opacity-50">{loadingMore ? 'Đang tải...' : 'Tải thêm'}</button></div>{/if}{/snippet}
 
 {#snippet spiritSortHeader(label: string, key: SpiritSortKey)}<button
 		type="button"

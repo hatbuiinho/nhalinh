@@ -22,6 +22,7 @@ type Store interface {
 	UpdatePosition(context.Context, Position) (Position, error)
 	ListTablets(context.Context, Actor, string) ([]Tablet, error)
 	CreateTablet(context.Context, Tablet) (Tablet, error)
+	CreateTablets(context.Context, []Tablet) ([]Tablet, error)
 	CreateTabletWithSpirits(context.Context, Tablet, []Spirit, []string, string) (Tablet, error)
 	UpdateTabletWithSpirits(context.Context, Tablet, []Spirit) (Tablet, error)
 	ListSpirits(context.Context, Actor, SearchOptions) ([]Spirit, int, error)
@@ -31,8 +32,11 @@ type Store interface {
 	UpdateSpirit(context.Context, Spirit) (Spirit, error)
 	PatchSpirit(context.Context, string, string, string, time.Time) error
 	DeleteSpirit(context.Context, string) error
+	BulkPatchSpirits(context.Context, []string, string, string, time.Time) error
+	SoftDeleteSpirits(context.Context, []string, time.Time) error
 	HouseIDForArea(context.Context, string) (string, error)
 	HouseIDForPosition(context.Context, string) (string, error)
 	HouseIDForTablet(context.Context, string) (string, error)
 	HouseIDForSpirit(context.Context, string) (string, error)
+	HouseIDsForSpirits(context.Context, []string) (map[string]string, error)
 }

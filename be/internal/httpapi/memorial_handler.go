@@ -56,6 +56,7 @@ type spiritPayload struct {
 	Sender      string `json:"sender"`
 	SentMonth   string `json:"sent_month"`
 	Notes       string `json:"notes"`
+	HasUrn      bool   `json:"has_urn"`
 }
 type spiritsBatchPayload struct {
 	Spirits []spiritPayload `json:"spirits"`
@@ -63,6 +64,14 @@ type spiritsBatchPayload struct {
 type spiritPatchPayload struct {
 	Field string `json:"field"`
 	Value string `json:"value"`
+}
+type spiritsBulkPatchPayload struct {
+	IDs   []string `json:"ids"`
+	Field string   `json:"field"`
+	Value string   `json:"value"`
+}
+type spiritsBulkDeletePayload struct {
+	IDs []string `json:"ids"`
 }
 
 const maxSpiritImportFileSize = 12 << 20
@@ -243,7 +252,7 @@ func (h *MemorialHandler) Spirits(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		v, total, e := h.service.ListSpirits(r.Context(), actor(r), memorial.SearchOptions{Query: r.URL.Query().Get("q"), HouseID: r.URL.Query().Get("house_id"), AreaID: r.URL.Query().Get("area_id"), PositionID: r.URL.Query().Get("position_id"), TabletID: r.URL.Query().Get("tablet_id"), Limit: limit, Offset: offset, Unplaced: r.URL.Query().Get("unplaced") == "true"})
+		v, total, e := h.service.ListSpirits(r.Context(), actor(r), memorial.SearchOptions{Query: r.URL.Query().Get("q"), HouseID: r.URL.Query().Get("house_id"), AreaID: r.URL.Query().Get("area_id"), PositionID: r.URL.Query().Get("position_id"), TabletID: r.URL.Query().Get("tablet_id"), Limit: limit, Offset: offset, Unplaced: r.URL.Query().Get("unplaced") == "true", PlacementStatus: r.URL.Query().Get("placement_status"), UrnStatus: r.URL.Query().Get("urn_status")})
 		h.write(w, map[string]any{"spirits": v, "total": total, "has_more": offset+len(v) < total}, e, 200)
 	case http.MethodPost:
 		var p spiritPayload
@@ -315,20 +324,35 @@ func (h *MemorialHandler) SpiritExport(w http.ResponseWriter, r *http.Request) {
 	_, _ = w.Write(data)
 }
 func (h *MemorialHandler) SpiritsBatch(w http.ResponseWriter, r *http.Request) {
-	if r.Method != http.MethodPost {
+	switch r.Method {
+	case http.MethodPost:
+		var p spiritsBatchPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		inputs := make([]memorial.SpiritInput, 0, len(p.Spirits))
+		for _, spirit := range p.Spirits {
+			inputs = append(inputs, spiritInput(spirit))
+		}
+		v, e := h.service.CreateSpirits(r.Context(), actor(r), inputs)
+		h.write(w, map[string]any{"spirits": v}, e, http.StatusCreated)
+	case http.MethodPatch:
+		var p spiritsBulkPatchPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		e := h.service.BulkPatchSpirits(r.Context(), actor(r), p.IDs, p.Field, p.Value)
+		h.write(w, map[string]any{"updated_count": len(p.IDs)}, e, http.StatusOK)
+	case http.MethodDelete:
+		var p spiritsBulkDeletePayload
+		if !decode(w, r, &p) {
+			return
+		}
+		e := h.service.BulkDeleteSpirits(r.Context(), actor(r), p.IDs)
+		h.write(w, map[string]any{"deleted_count": len(p.IDs)}, e, http.StatusOK)
+	default:
 		methodNotAllowed(w)
-		return
 	}
-	var p spiritsBatchPayload
-	if !decode(w, r, &p) {
-		return
-	}
-	inputs := make([]memorial.SpiritInput, 0, len(p.Spirits))
-	for _, spirit := range p.Spirits {
-		inputs = append(inputs, spiritInput(spirit))
-	}
-	v, e := h.service.CreateSpirits(r.Context(), actor(r), inputs)
-	h.write(w, map[string]any{"spirits": v}, e, http.StatusCreated)
 }
 func (h *MemorialHandler) Spirit(w http.ResponseWriter, r *http.Request) {
 	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/spirits/"), "/")
@@ -362,7 +386,7 @@ func (h *MemorialHandler) Spirit(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func spiritInput(p spiritPayload) memorial.SpiritInput {
-	return memorial.SpiritInput{ID: p.ID, HouseID: p.HouseID, TabletID: p.TabletID, FullName: p.FullName, DharmaName: p.DharmaName, BirthYear: p.BirthYear, DeathYear: p.DeathYear, Age: p.Age, ImageURL: p.ImageURL, BurialPlace: p.BurialPlace, Sender: p.Sender, SentMonth: p.SentMonth, Notes: p.Notes}
+	return memorial.SpiritInput{ID: p.ID, HouseID: p.HouseID, TabletID: p.TabletID, FullName: p.FullName, DharmaName: p.DharmaName, BirthYear: p.BirthYear, DeathYear: p.DeathYear, Age: p.Age, ImageURL: p.ImageURL, BurialPlace: p.BurialPlace, Sender: p.Sender, SentMonth: p.SentMonth, Notes: p.Notes, HasUrn: p.HasUrn}
 }
 func readSpiritImportUpload(w http.ResponseWriter, r *http.Request) (string, []byte, bool) {
 	if err := r.ParseMultipartForm(maxSpiritImportFileSize); err != nil {

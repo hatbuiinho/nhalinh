@@ -215,7 +215,7 @@ func (s *MemoryStore) ListOccupancyPositions(_ context.Context, _ Actor, houseID
 	out := []Position{}
 	unplaced := 0
 	for _, spirit := range s.spirits {
-		if spirit.HouseID == houseID && spirit.TabletID == "" {
+		if spirit.DeletedAt == nil && spirit.HouseID == houseID && spirit.TabletID == "" {
 			unplaced++
 		}
 	}
@@ -234,7 +234,7 @@ func (s *MemoryStore) ListOccupancyPositions(_ context.Context, _ Actor, houseID
 			}
 			v.TabletCount++
 			for _, spirit := range s.spirits {
-				if spirit.TabletID == tablet.ID {
+				if spirit.DeletedAt == nil && spirit.TabletID == tablet.ID {
 					v.SpiritCount++
 				}
 			}
@@ -338,6 +338,18 @@ func (s *MemoryStore) CreateTablet(_ context.Context, v Tablet) (Tablet, error) 
 	s.tablets[v.ID] = v
 	return v, nil
 }
+func (s *MemoryStore) CreateTablets(ctx context.Context, items []Tablet) ([]Tablet, error) {
+	out := make([]Tablet, 0, len(items))
+	for _, item := range items {
+		v, err := s.CreateTablet(ctx, item)
+		if err == nil {
+			out = append(out, v)
+		} else if !Is(err, ErrConflict) {
+			return nil, err
+		}
+	}
+	return out, nil
+}
 func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spirits []Spirit, existingSpiritIDs []string, houseID string) (Tablet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
@@ -408,6 +420,9 @@ func (s *MemoryStore) ListSpirits(_ context.Context, a Actor, o SearchOptions) (
 	out := []Spirit{}
 	q := fold(o.Query)
 	for _, v := range s.spirits {
+		if v.DeletedAt != nil {
+			continue
+		}
 		v = s.join(v)
 		if a.Role != "admin" && !a.AllHouses && !s.members[v.HouseID][a.ID] {
 			continue
@@ -434,7 +449,7 @@ func (s *MemoryStore) GetSpirit(_ context.Context, a Actor, id string) (Spirit, 
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	v, ok := s.spirits[id]
-	if !ok {
+	if !ok || v.DeletedAt != nil {
 		return Spirit{}, ErrNotFound
 	}
 	v = s.join(v)
@@ -461,7 +476,7 @@ func (s *MemoryStore) UpdateSpirit(_ context.Context, v Spirit) (Spirit, error) 
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	old, ok := s.spirits[v.ID]
-	if !ok {
+	if !ok || old.DeletedAt != nil {
 		return Spirit{}, ErrNotFound
 	}
 	v.CreatedAt = old.CreatedAt
@@ -472,7 +487,7 @@ func (s *MemoryStore) PatchSpirit(_ context.Context, id, field, value string, up
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	v, ok := s.spirits[id]
-	if !ok {
+	if !ok || v.DeletedAt != nil {
 		return ErrNotFound
 	}
 	switch field {
@@ -504,10 +519,14 @@ func (s *MemoryStore) PatchSpirit(_ context.Context, id, field, value string, up
 func (s *MemoryStore) DeleteSpirit(_ context.Context, id string) error {
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if _, ok := s.spirits[id]; !ok {
+	v, ok := s.spirits[id]
+	if !ok || v.DeletedAt != nil {
 		return ErrNotFound
 	}
-	delete(s.spirits, id)
+	now := time.Now().UTC()
+	v.DeletedAt = &now
+	v.UpdatedAt = now
+	s.spirits[id] = v
 	return nil
 }
 func (s *MemoryStore) HouseIDForArea(_ context.Context, id string) (string, error) {
@@ -518,6 +537,49 @@ func (s *MemoryStore) HouseIDForArea(_ context.Context, id string) (string, erro
 		return "", ErrNotFound
 	}
 	return v.HouseID, nil
+}
+func (s *MemoryStore) HouseIDsForSpirits(_ context.Context, ids []string) (map[string]string, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	houses := make(map[string]string, len(ids))
+	for _, id := range ids {
+		v, ok := s.spirits[id]
+		if !ok || v.DeletedAt != nil {
+			continue
+		}
+		houses[id] = v.HouseID
+	}
+	return houses, nil
+}
+func (s *MemoryStore) BulkPatchSpirits(_ context.Context, ids []string, field, value string, updatedAt time.Time) error {
+	for _, id := range ids {
+		if _, ok := s.spirits[id]; !ok || s.spirits[id].DeletedAt != nil {
+			return ErrNotFound
+		}
+	}
+	for _, id := range ids {
+		if err := s.PatchSpirit(context.Background(), id, field, value, updatedAt); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+func (s *MemoryStore) SoftDeleteSpirits(_ context.Context, ids []string, deletedAt time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, id := range ids {
+		v, ok := s.spirits[id]
+		if !ok || v.DeletedAt != nil {
+			return ErrNotFound
+		}
+	}
+	for _, id := range ids {
+		v := s.spirits[id]
+		v.DeletedAt = &deletedAt
+		v.UpdatedAt = deletedAt
+		s.spirits[id] = v
+	}
+	return nil
 }
 func (s *MemoryStore) HouseIDForPosition(_ context.Context, id string) (string, error) {
 	s.mu.RLock()
@@ -546,7 +608,7 @@ func (s *MemoryStore) HouseIDForSpirit(_ context.Context, id string) (string, er
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	v, ok := s.spirits[id]
-	if !ok {
+	if !ok || v.DeletedAt != nil {
 		return "", ErrNotFound
 	}
 	if v.HouseID != "" {

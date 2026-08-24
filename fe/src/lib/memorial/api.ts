@@ -284,6 +284,16 @@ export const patchSpirit = (id: string, field: string, value: string) =>
 	});
 export const deleteSpirit = (id: string) =>
 	apiRequest<void>(`/api/spirits/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const bulkPatchSpirits = (ids: string[], field: string, value: string) =>
+	apiRequest<{ updated_count: number }>('/api/spirits/batch', {
+		method: 'PATCH',
+		body: JSON.stringify({ ids, field, value })
+	});
+export const bulkDeleteSpirits = (ids: string[]) =>
+	apiRequest<{ deleted_count: number }>('/api/spirits/batch', {
+		method: 'DELETE',
+		body: JSON.stringify({ ids })
+	});
 
 export async function downloadSpiritImportTemplate() {
 	return apiBlob('/api/spirits/import-template.xlsx');

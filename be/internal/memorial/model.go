@@ -96,27 +96,29 @@ type Tablet struct {
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 type Spirit struct {
-	ID           string    `json:"id"`
-	TabletID     string    `json:"tablet_id"`
-	HouseID      string    `json:"house_id"`
-	HouseName    string    `json:"house_name"`
-	AreaID       string    `json:"area_id"`
-	AreaCode     string    `json:"area_code"`
-	PositionID   string    `json:"position_id"`
-	PositionName string    `json:"position_name"`
-	TabletName   string    `json:"tablet_name"`
-	FullName     string    `json:"full_name"`
-	DharmaName   string    `json:"dharma_name"`
-	BirthYear    string    `json:"birth_year"`
-	DeathYear    string    `json:"death_year"`
-	Age          string    `json:"age"`
-	ImageURL     string    `json:"image_url"`
-	BurialPlace  string    `json:"burial_place"`
-	Sender       string    `json:"sender"`
-	SentMonth    string    `json:"sent_month"`
-	Notes        string    `json:"notes"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID           string     `json:"id"`
+	TabletID     string     `json:"tablet_id"`
+	HouseID      string     `json:"house_id"`
+	HouseName    string     `json:"house_name"`
+	AreaID       string     `json:"area_id"`
+	AreaCode     string     `json:"area_code"`
+	PositionID   string     `json:"position_id"`
+	PositionName string     `json:"position_name"`
+	TabletName   string     `json:"tablet_name"`
+	FullName     string     `json:"full_name"`
+	DharmaName   string     `json:"dharma_name"`
+	BirthYear    string     `json:"birth_year"`
+	DeathYear    string     `json:"death_year"`
+	Age          string     `json:"age"`
+	ImageURL     string     `json:"image_url"`
+	BurialPlace  string     `json:"burial_place"`
+	Sender       string     `json:"sender"`
+	SentMonth    string     `json:"sent_month"`
+	Notes        string     `json:"notes"`
+	HasUrn       bool       `json:"has_urn"`
+	CreatedAt    time.Time  `json:"created_at"`
+	UpdatedAt    time.Time  `json:"updated_at"`
+	DeletedAt    *time.Time `json:"-"`
 }
 type HouseInput struct {
 	Name, Address, Notes string
@@ -133,11 +135,15 @@ type TabletInput struct {
 	Spirits                 []SpiritInput
 	ExistingSpiritIDs       []string
 }
-type SpiritInput struct{ ID, HouseID, TabletID, FullName, DharmaName, BirthYear, DeathYear, Age, ImageURL, BurialPlace, Sender, SentMonth, Notes string }
+type SpiritInput struct {
+	ID, HouseID, TabletID, FullName, DharmaName, BirthYear, DeathYear, Age, ImageURL, BurialPlace, Sender, SentMonth, Notes string
+	HasUrn                                                                                                                  bool
+}
 type SearchOptions struct {
 	Query, HouseID, AreaID, PositionID, TabletID string
 	Limit, Offset                                int
 	Unplaced                                     bool
+	PlacementStatus, UrnStatus                   string
 }
 type PositionSearchOptions struct {
 	HouseID, Query string

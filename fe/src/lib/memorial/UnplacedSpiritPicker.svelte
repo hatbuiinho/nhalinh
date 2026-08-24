@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { searchUnplacedSpirits, type Spirit } from './api';
 	import { toastStore } from '$lib/ui/toast-store.svelte';
+	import SpiritPortrait from './SpiritPortrait.svelte';
 
 	let {
 		houseId,
@@ -113,14 +114,7 @@
 						onclick={() => selectSpirit(spirit)}
 						class="flex w-full items-center gap-3 rounded-md px-3 py-2 text-left hover:bg-[var(--color-primary-soft)]"
 					>
-						{#if spirit.image_url}<img
-								src={spirit.image_url}
-								alt=""
-								class="h-10 w-8 shrink-0 rounded object-cover"
-							/>{:else}<span
-								class="grid h-10 w-8 shrink-0 place-items-center rounded bg-[var(--color-surface-muted)]"
-								><span class="icon-[lucide--user] h-4 w-4 opacity-50"></span></span
-							>{/if}
+						<SpiritPortrait imageUrl={spirit.image_url} alt={spirit.full_name} sizeClass="h-10 w-8 shrink-0" />
 						<span class="min-w-0 flex-1">
 							<span class="block truncate text-sm font-semibold">{spirit.full_name}</span>
 							<span class="block truncate text-xs text-[var(--color-text-secondary)]">

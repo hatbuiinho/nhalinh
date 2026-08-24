@@ -2,6 +2,7 @@
 	import AvatarCropDialog from '$lib/ui/AvatarCropDialog.svelte';
 	import Lightbox from '$lib/ui/Lightbox.svelte';
 	import { toastStore } from '$lib/ui/toast-store.svelte';
+	import SpiritPortrait from './SpiritPortrait.svelte';
 	let {
 		imageUrl = '',
 		displayName,
@@ -49,14 +50,10 @@
 		type="button"
 		onclick={() => imageUrl && (lightboxOpen = true)}
 		class={[
-			'relative grid aspect-[3/4] shrink-0 place-items-center overflow-hidden rounded-md border border-[var(--color-border-strong)] bg-[var(--color-primary-soft)] font-semibold text-[var(--color-primary-dark)]',
+			'relative grid aspect-[3/4] shrink-0 place-items-center',
 			compact ? 'w-12 text-sm' : 'w-28 text-2xl'
 		]}
-		>{#if imageUrl}<img
-				src={imageUrl}
-				alt={displayName}
-				class="h-full w-full object-cover"
-			/>{:else}{displayName.trim().slice(0, 1).toUpperCase() || '?'}{/if}{#if uploading}<span
+		><SpiritPortrait imageUrl={imageUrl} alt={displayName} sizeClass="h-full w-full" />{#if uploading}<span
 				class="absolute inset-0 grid place-items-center bg-black/45 text-white"
 				><span class="icon-[lucide--loader-circle] h-6 w-6 animate-spin"></span></span
 			>{/if}</button
