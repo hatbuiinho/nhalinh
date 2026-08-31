@@ -1302,12 +1302,12 @@
 						'Nơi an táng',
 						'burial_place'
 					)}{@render field('Người gửi', 'sender')}
-					><label class="md:col-span-2"
+					<label class="md:col-span-2"
 						><span class="mb-1 block text-sm font-medium">Ghi chú</span><textarea
 							bind:value={form.notes}
 							rows="3"
-							class="w-full rounded-md border-[var(--color-border-strong)]"></textarea></label
-					>{:else}<div class="h-[52dvh] min-h-[360px] md:col-span-2">
+							class="w-full rounded-md border-[var(--color-border-strong)]"></textarea></label>
+						{:else}<div class="h-[52dvh] min-h-[360px] md:col-span-2">
 						<InlineSpiritEditor
 							bind:items={newSpirits}
 							onbusychange={(busy) => (inlineEditorBusy = busy)}
