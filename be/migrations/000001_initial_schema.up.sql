@@ -87,7 +87,7 @@ CREATE TABLE memorial_positions (
 CREATE TABLE memorial_tablets (
   id text PRIMARY KEY,
   position_id text NOT NULL REFERENCES memorial_positions(id) ON DELETE CASCADE,
-  name varchar(120) NOT NULL,
+  name text NOT NULL,
   notes text NOT NULL DEFAULT '',
   created_at timestamptz NOT NULL,
   updated_at timestamptz NOT NULL,
