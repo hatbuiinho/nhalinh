@@ -42,6 +42,9 @@ type tabletPayload struct {
 	Spirits           []spiritPayload `json:"spirits"`
 	ExistingSpiritIDs []string        `json:"existing_spirit_ids"`
 }
+type tabletMovePayload struct {
+	PositionID string `json:"position_id"`
+}
 type spiritPayload struct {
 	ID          string `json:"id"`
 	HouseID     string `json:"house_id"`
@@ -169,16 +172,20 @@ func (h *MemorialHandler) Position(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "Không tìm thấy vị trí")
 		return
 	}
-	if r.Method != http.MethodPut {
+	switch r.Method {
+	case http.MethodPut:
+		var p positionPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		v, e := h.service.UpdatePosition(r.Context(), actor(r), id, memorial.PositionInput{AreaID: p.AreaID, RowNumber: p.RowNumber, ColumnNumber: p.ColumnNumber, Notes: p.Notes})
+		h.write(w, v, e, http.StatusOK)
+	case http.MethodDelete:
+		e := h.service.DeletePosition(r.Context(), actor(r), id)
+		h.write(w, nil, e, http.StatusNoContent)
+	default:
 		methodNotAllowed(w)
-		return
 	}
-	var p positionPayload
-	if !decode(w, r, &p) {
-		return
-	}
-	v, e := h.service.UpdatePosition(r.Context(), actor(r), id, memorial.PositionInput{AreaID: p.AreaID, RowNumber: p.RowNumber, ColumnNumber: p.ColumnNumber, Notes: p.Notes})
-	h.write(w, v, e, 200)
 }
 func (h *MemorialHandler) PositionsBatch(w http.ResponseWriter, r *http.Request) {
 	if r.Method != http.MethodPost {
@@ -207,7 +214,13 @@ func (h *MemorialHandler) Occupancy(w http.ResponseWriter, r *http.Request) {
 func (h *MemorialHandler) Tablets(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
-		v, e := h.service.ListTablets(r.Context(), actor(r), r.URL.Query().Get("position_id"))
+		var v []memorial.Tablet
+		var e error
+		if r.URL.Query().Get("unplaced") == "true" {
+			v, e = h.service.ListUnplacedTablets(r.Context(), actor(r), r.URL.Query().Get("house_id"), r.URL.Query().Get("q"))
+		} else {
+			v, e = h.service.ListTablets(r.Context(), actor(r), r.URL.Query().Get("position_id"))
+		}
 		h.write(w, map[string]any{"tablets": v}, e, 200)
 	case http.MethodPost:
 		var p tabletPayload
@@ -230,20 +243,31 @@ func (h *MemorialHandler) Tablet(w http.ResponseWriter, r *http.Request) {
 		writeError(w, 404, "not_found", "Không tìm thấy bài vị")
 		return
 	}
-	if r.Method != http.MethodPut {
+	switch r.Method {
+	case http.MethodPatch:
+		var p tabletMovePayload
+		if !decode(w, r, &p) {
+			return
+		}
+		e := h.service.MoveTablet(r.Context(), actor(r), id, p.PositionID)
+		h.write(w, nil, e, http.StatusNoContent)
+	case http.MethodPut:
+		var p tabletPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		spirits := make([]memorial.SpiritInput, 0, len(p.Spirits))
+		for _, spirit := range p.Spirits {
+			spirits = append(spirits, spiritInput(spirit))
+		}
+		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Notes: p.Notes, Spirits: spirits})
+		h.write(w, v, e, 200)
+	case http.MethodDelete:
+		e := h.service.DeleteTablet(r.Context(), actor(r), id, r.URL.Query().Get("delete_spirits") == "true")
+		h.write(w, nil, e, http.StatusNoContent)
+	default:
 		methodNotAllowed(w)
-		return
 	}
-	var p tabletPayload
-	if !decode(w, r, &p) {
-		return
-	}
-	spirits := make([]memorial.SpiritInput, 0, len(p.Spirits))
-	for _, spirit := range p.Spirits {
-		spirits = append(spirits, spiritInput(spirit))
-	}
-	v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Notes: p.Notes, Spirits: spirits})
-	h.write(w, v, e, 200)
 }
 func (h *MemorialHandler) Spirits(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {

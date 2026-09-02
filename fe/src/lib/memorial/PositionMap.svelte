@@ -38,7 +38,7 @@
 
 	let maxRow = $derived(Math.max(0, ...positions.map((position) => position.row_number)));
 	let maxColumn = $derived(Math.max(0, ...positions.map((position) => position.column_number)));
-	let maxTabletCount = $derived(Math.max(0, ...positions.map((position) => position.tablet_count)));
+	let maxSpiritCount = $derived(Math.max(0, ...positions.map((position) => position.spirit_count)));
 	let rows = $derived(Array.from({ length: maxRow }, (_, index) => index + 1));
 	let columns = $derived(Array.from({ length: maxColumn }, (_, index) => index + 1));
 	let positionByCoordinate = $derived(
@@ -67,8 +67,8 @@
 	}
 
 	function heatLevel(position: Position): HeatLevel {
-		if (position.tablet_count === 0 || maxTabletCount === 0) return 'empty';
-		const ratio = position.tablet_count / maxTabletCount;
+		if (position.spirit_count === 0 || maxSpiritCount === 0) return 'empty';
+		const ratio = position.spirit_count / maxSpiritCount;
 		if (ratio <= 0.25) return 'low';
 		if (ratio <= 0.5) return 'medium';
 		if (ratio <= 0.75) return 'high';
@@ -215,7 +215,7 @@
 		<div>
 			<h3 class="font-semibold">Sơ đồ Khu {areaCode}</h3>
 			<p class="mt-1 text-xs text-[var(--color-text-secondary)]">
-				Màu thể hiện mật độ bài vị tương đối trong khu. Kéo để di chuyển, Ctrl/Cmd + lăn chuột để
+				Màu thể hiện mật độ Hương linh tương đối trong khu. Kéo để di chuyển, Ctrl/Cmd + lăn chuột để
 				zoom.
 			</p>
 		</div>
@@ -244,7 +244,7 @@
 			</div>
 			<select
 				bind:value={heatFilter}
-				aria-label="Lọc mật độ bài vị"
+			aria-label="Lọc mật độ Hương linh"
 				class="h-10 rounded-md border-[var(--color-border-strong)] text-sm"
 			>
 				<option value="all">Tất cả mật độ</option>
@@ -353,15 +353,15 @@
 								<strong class="block leading-tight" style={`font-size: ${titleFontSize}px;`}>
 									{position.name}
 								</strong>
-								<span
+								{#if position.tablet_count > 1}<span
 									class="block leading-tight font-semibold"
 									style={`margin-top: ${titleGap}px; font-size: ${metricFontSize}px;`}
 								>
 									{position.tablet_count} BV
-								</span>
+								</span>{/if}
 								<span
 									class="block leading-tight opacity-75"
-									style={`margin-top: ${metricGap}px; font-size: ${metricFontSize}px;`}
+									style={`margin-top: ${position.tablet_count > 1 ? metricGap : titleGap}px; font-size: ${metricFontSize}px;`}
 								>
 									{position.spirit_count} HL
 								</span>

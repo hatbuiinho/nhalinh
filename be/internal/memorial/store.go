@@ -20,11 +20,15 @@ type Store interface {
 	CreatePosition(context.Context, Position) (Position, error)
 	CreatePositions(context.Context, []Position) ([]Position, error)
 	UpdatePosition(context.Context, Position) (Position, error)
+	DeletePosition(context.Context, string, time.Time) error
 	ListTablets(context.Context, Actor, string) ([]Tablet, error)
+	ListUnplacedTablets(context.Context, Actor, string, string) ([]Tablet, error)
+	MoveTablet(context.Context, string, string, time.Time) error
 	CreateTablet(context.Context, Tablet) (Tablet, error)
 	CreateTablets(context.Context, []Tablet) ([]Tablet, error)
 	CreateTabletWithSpirits(context.Context, Tablet, []Spirit, []string, string) (Tablet, error)
 	UpdateTabletWithSpirits(context.Context, Tablet, []Spirit) (Tablet, error)
+	DeleteTablet(context.Context, string, bool, time.Time) error
 	ListSpirits(context.Context, Actor, SearchOptions) ([]Spirit, int, error)
 	GetSpirit(context.Context, Actor, string) (Spirit, error)
 	CreateSpirit(context.Context, Spirit) (Spirit, error)

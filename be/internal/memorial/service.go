@@ -208,6 +208,39 @@ func (s *Service) UpdatePosition(ctx context.Context, actor Actor, id string, in
 	name := fmt.Sprintf("%d%s-%d", in.ColumnNumber, strings.ToUpper(areaCode), in.RowNumber)
 	return s.store.UpdatePosition(ctx, Position{ID: id, AreaID: in.AreaID, Name: name, RowNumber: in.RowNumber, ColumnNumber: in.ColumnNumber, Notes: strings.TrimSpace(in.Notes), UpdatedAt: s.now().UTC()})
 }
+func (s *Service) DeletePosition(ctx context.Context, actor Actor, id string) error {
+	house, err := s.store.HouseIDForPosition(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err = s.requireWrite(ctx, actor, house); err != nil {
+		return err
+	}
+	return s.store.DeletePosition(ctx, id, s.now().UTC())
+}
+func (s *Service) ListUnplacedTablets(ctx context.Context, actor Actor, houseID, query string) ([]Tablet, error) {
+	if _, err := s.store.AccessRole(ctx, actor, houseID); err != nil {
+		return nil, err
+	}
+	return s.store.ListUnplacedTablets(ctx, actor, houseID, strings.TrimSpace(query))
+}
+func (s *Service) MoveTablet(ctx context.Context, actor Actor, tabletID, positionID string) error {
+	house, err := s.store.HouseIDForTablet(ctx, tabletID)
+	if err != nil {
+		return err
+	}
+	if err = s.requireWrite(ctx, actor, house); err != nil {
+		return err
+	}
+	targetHouse, err := s.store.HouseIDForPosition(ctx, positionID)
+	if err != nil {
+		return err
+	}
+	if targetHouse != house {
+		return fmt.Errorf("%w: cannot move tablet to another house", ErrInvalidInput)
+	}
+	return s.store.MoveTablet(ctx, tabletID, positionID, s.now().UTC())
+}
 func (s *Service) ListTablets(ctx context.Context, actor Actor, positionID string) ([]Tablet, error) {
 	house, err := s.store.HouseIDForPosition(ctx, positionID)
 	if err != nil {
@@ -244,7 +277,7 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
 	now := s.now().UTC()
-	tablet := Tablet{ID: newID("tablet"), PositionID: in.PositionID, Name: name, Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now}
+	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {
 		spiritInput.TabletID = tablet.ID
@@ -305,6 +338,16 @@ func (s *Service) UpdateTablet(ctx context.Context, actor Actor, id string, in T
 		spirits = append(spirits, spirit)
 	}
 	return s.store.UpdateTabletWithSpirits(ctx, tablet, spirits)
+}
+func (s *Service) DeleteTablet(ctx context.Context, actor Actor, id string, deleteSpirits bool) error {
+	house, err := s.store.HouseIDForTablet(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err = s.requireWrite(ctx, actor, house); err != nil {
+		return err
+	}
+	return s.store.DeleteTablet(ctx, id, deleteSpirits, s.now().UTC())
 }
 func (s *Service) ListSpirits(ctx context.Context, actor Actor, o SearchOptions) ([]Spirit, int, error) {
 	o.Query = strings.TrimSpace(o.Query)

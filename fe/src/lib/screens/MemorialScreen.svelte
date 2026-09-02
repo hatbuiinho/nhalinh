@@ -9,6 +9,7 @@
 	import InlineSpiritEditor from '$lib/memorial/InlineSpiritEditor.svelte';
 	import SpiritImageUploader from '$lib/memorial/SpiritImageUploader.svelte';
 	import SpiritPortrait from '$lib/memorial/SpiritPortrait.svelte';
+	import { memorialRevisionStore } from '$lib/memorial/memorial-revision-store.svelte';
 	import { uploadSpiritImage } from '$lib/uploads/api';
 	import {
 		createTablet,
@@ -63,7 +64,8 @@
 		| 'created_at'
 		| 'updated_at'
 	>;
-	type SpiritColumn = { key: SpiritSortKey; label: string; width: string };
+	type SpiritColumn = { key: SpiritSortKey; label: string; defaultWidth: number };
+	type SpiritTableGroup = { key: string; items: Spirit[]; hasPosition: boolean };
 	type EditablePatchKey = Extract<
 		SpiritSortKey,
 		| 'full_name'
@@ -77,24 +79,28 @@
 		| 'notes'
 	>;
 	const spiritColumns: SpiritColumn[] = [
-		{ key: 'image_url', label: 'Ảnh', width: 'w-20' },
-		{ key: 'full_name', label: 'Họ tên', width: 'w-52' },
-		{ key: 'dharma_name', label: 'Pháp danh', width: 'w-44' },
-		{ key: 'birth_year', label: 'Năm sinh', width: 'w-28' },
-		{ key: 'death_year', label: 'Năm mất', width: 'w-28' },
-		{ key: 'age', label: 'Tuổi', width: 'w-24' },
-		{ key: 'house_name', label: 'Nhà Linh', width: 'w-44' },
-		{ key: 'area_code', label: 'Khu vực', width: 'w-28' },
-		{ key: 'position_name', label: 'Vị trí', width: 'w-32' },
-		{ key: 'tablet_name', label: 'Bài vị', width: 'w-44' },
-		{ key: 'burial_place', label: 'Nơi an táng', width: 'w-52' },
-		{ key: 'sender', label: 'Người gửi', width: 'w-44' },
-		{ key: 'sent_month', label: 'Tháng gửi', width: 'w-32' },
-		{ key: 'notes', label: 'Ghi chú', width: 'w-56' },
-		{ key: 'created_at', label: 'Ngày tạo', width: 'w-36' },
-		{ key: 'updated_at', label: 'Cập nhật', width: 'w-36' }
+		{ key: 'image_url', label: 'Ảnh', defaultWidth: 96 },
+		{ key: 'full_name', label: 'Họ tên', defaultWidth: 208 },
+		{ key: 'dharma_name', label: 'Pháp danh', defaultWidth: 176 },
+		{ key: 'birth_year', label: 'Năm sinh', defaultWidth: 112 },
+		{ key: 'death_year', label: 'Năm mất', defaultWidth: 112 },
+		{ key: 'age', label: 'Tuổi', defaultWidth: 96 },
+		{ key: 'burial_place', label: 'Nơi an táng', defaultWidth: 208 },
+		{ key: 'sender', label: 'Người gửi', defaultWidth: 176 },
+		{ key: 'sent_month', label: 'Tháng gửi', defaultWidth: 128 },
+		{ key: 'notes', label: 'Ghi chú', defaultWidth: 224 },
+		{ key: 'created_at', label: 'Ngày tạo', defaultWidth: 144 },
+		{ key: 'updated_at', label: 'Cập nhật', defaultWidth: 144 }
 	];
-	const spiritSortKeys = new Set<SpiritSortKey>(spiritColumns.map((column) => column.key));
+	const placementColumns: SpiritColumn[] = [
+		{ key: 'house_name', label: 'Nhà Linh', defaultWidth: 176 },
+		{ key: 'position_name', label: 'Vị trí', defaultWidth: 128 },
+		{ key: 'tablet_name', label: 'Bài vị', defaultWidth: 176 }
+	];
+	const spiritSortKeys = new Set<SpiritSortKey>([
+		...spiritColumns.map((column) => column.key),
+		...placementColumns.map((column) => column.key)
+	]);
 	const vietnameseCollator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
 	const editablePatchKeys = new Set<SpiritSortKey>([
 		'full_name',
@@ -161,6 +167,7 @@
 		positionTimer: ReturnType<typeof setTimeout> | undefined,
 		positionRequest = 0,
 		tabletRequest = 0;
+	let columnWidths = $state<Record<string, number>>({});
 	let form = $state<SpiritInput>(emptyForm());
 	let newSpirits = $state<EditableSpiritInput[]>([emptyInlineSpirit()]);
 	let cellEditRoot = $state<HTMLFormElement>();
@@ -174,6 +181,12 @@
 	let canWrite = $derived(
 		authStore.user?.role === 'admin' || selectedHouse?.access_role === 'editor'
 	);
+	let showsHouseColumn = $derived(houses.length > 1);
+	let tableSpiritColumns = $derived([
+		...placementColumns.slice(1),
+		...(showsHouseColumn ? [placementColumns[0]] : []),
+		...spiritColumns
+	]);
 	let sortedSpirits = $derived.by(() => {
 		const direction = spiritSortDirection === 'asc' ? 1 : -1;
 		return [...spirits].sort((left, right) => {
@@ -184,6 +197,46 @@
 			return (result || vietnameseCollator.compare(left.full_name, right.full_name)) * direction;
 		});
 	});
+	let tableSpiritGroups = $derived.by(() => {
+		const groups = new Map<string, SpiritTableGroup>();
+		for (const item of spirits) {
+			const hasPosition = Boolean(item.position_id);
+			const key = hasPosition ? item.position_id : `unplaced:${item.id}`;
+			const group = groups.get(key) ?? { key, items: [], hasPosition };
+			group.items.push(item);
+			groups.set(key, group);
+		}
+		const direction = spiritSortDirection === 'asc' ? 1 : -1;
+		const compare = (left: Spirit, right: Spirit) => {
+			const result = vietnameseCollator.compare(
+				String(left[spiritSortKey] ?? ''),
+				String(right[spiritSortKey] ?? '')
+			);
+			return (result || vietnameseCollator.compare(left.full_name, right.full_name)) * direction;
+		};
+		const placementSort = new Set<SpiritSortKey>(['house_name', 'position_name', 'tablet_name']);
+		for (const group of groups.values()) group.items.sort(compare);
+		const items = [...groups.values()];
+		items.sort((left, right) => {
+			if (placementSort.has(spiritSortKey)) return compare(left.items[0], right.items[0]);
+			return vietnameseCollator.compare(left.items[0].position_name || 'ZZZ', right.items[0].position_name || 'ZZZ');
+		});
+		return items;
+	});
+	let tableRowNumbers = $derived.by(() => {
+		const numbers = new Map<string, number>();
+		let index = 1;
+		for (const group of tableSpiritGroups) {
+			for (const item of group.items) numbers.set(item.id, index++);
+		}
+		return numbers;
+	});
+	let tableWidth = $derived(
+		(canWrite ? 40 : 0) +
+			56 +
+			(canWrite ? 128 : 0) +
+			tableSpiritColumns.reduce((total, column) => total + columnWidth(column), 0)
+	);
 	let selectedCount = $derived(selectedSpiritIDs.size);
 
 	onMount(() => {
@@ -220,9 +273,53 @@
 			if (savedSortDirection === 'asc' || savedSortDirection === 'desc') {
 				spiritSortDirection = savedSortDirection;
 			}
+			const savedColumnWidths = JSON.parse(
+				localStorage.getItem('nhalinh:spirit-table-column-widths') ?? '{}'
+			);
+			if (savedColumnWidths && typeof savedColumnWidths === 'object') {
+				columnWidths = Object.fromEntries(
+					Object.entries(savedColumnWidths).filter(
+						([, width]) => typeof width === 'number' && Number.isFinite(width) && width >= 80
+					)
+				) as Record<string, number>;
+			}
 		} catch {
 			// Keep defaults when browser storage is unavailable.
 		}
+	}
+	function columnWidth(column: SpiritColumn) {
+		return columnWidths[column.key] ?? column.defaultWidth;
+	}
+	function beginColumnResize(event: PointerEvent, column: SpiritColumn) {
+		event.preventDefault();
+		event.stopPropagation();
+		const handle = event.currentTarget;
+		if (handle instanceof HTMLElement) handle.setPointerCapture(event.pointerId);
+		const header = handle instanceof HTMLElement ? handle.closest('th') : null;
+		const update = (moveEvent: PointerEvent) => {
+			const left = header?.getBoundingClientRect().left;
+			const width = left === undefined ? columnWidth(column) : moveEvent.clientX - left;
+			columnWidths = {
+				...columnWidths,
+				[column.key]: Math.max(80, Math.round(width))
+			};
+		};
+		const finish = () => {
+			window.removeEventListener('pointermove', update);
+			window.removeEventListener('pointerup', finish);
+			window.removeEventListener('pointercancel', finish);
+			if (handle instanceof HTMLElement && handle.hasPointerCapture(event.pointerId)) {
+				handle.releasePointerCapture(event.pointerId);
+			}
+			try {
+				localStorage.setItem('nhalinh:spirit-table-column-widths', JSON.stringify(columnWidths));
+			} catch {
+				// Widths still apply for the current session when storage is unavailable.
+			}
+		};
+		window.addEventListener('pointermove', update);
+		window.addEventListener('pointerup', finish, { once: true });
+		window.addEventListener('pointercancel', finish, { once: true });
 	}
 	function setDesktopView(value: DesktopView) {
 		desktopView = value;
@@ -279,6 +376,7 @@
 		try {
 			const updated = await patchSpirit(cellEdit.id, cellEdit.key, cellEdit.value);
 			spirits = spirits.map((item) => (item.id === updated.id ? updated : item));
+			memorialRevisionStore.invalidate();
 			cellEdit = null;
 			toastStore.success('Đã cập nhật Hương linh');
 		} catch (error) {
@@ -405,6 +503,7 @@
 		importBusy = true;
 		try {
 			const result = await importSpiritsFromExcel(importFile, importHouseId);
+			memorialRevisionStore.invalidate();
 			importBusy = false;
 			toastStore.success(importSummary(result));
 			closeImportPopup();
@@ -519,6 +618,14 @@
 		} finally {
 			if (request === tabletRequest) tabletLoading = false;
 		}
+	}
+	function openSpiritEditorFromRow(event: MouseEvent, item: Spirit) {
+		if (!canWrite) return;
+		if (event.target instanceof Element && event.target.closest('button, input, select, textarea, label')) {
+			return;
+		}
+		cellEdit = null;
+		void edit(item);
 	}
 	function preferredFormHouse() {
 		if (houses.length === 1) return houses[0].id;
@@ -642,6 +749,7 @@
 					}))
 				);
 			}
+			memorialRevisionStore.invalidate();
 			toastStore.success(
 				quickCreateTablet
 					? 'Đã tạo bài vị và thêm Hương linh'
@@ -692,6 +800,7 @@
 		if (!ok) return;
 		try {
 			await deleteSpirit(item.id);
+			memorialRevisionStore.invalidate();
 			toastStore.success('Đã xoá Hương linh');
 			await load();
 		} catch (e) {
@@ -719,6 +828,7 @@
 		bulkBusy = true;
 		try {
 			await bulkPatchSpirits([...selectedSpiritIDs], bulkField, bulkValue);
+			memorialRevisionStore.invalidate();
 			toastStore.success(`Đã cập nhật ${selectedCount} Hương linh`);
 			bulkPatchOpen = false;
 			clearSpiritSelection();
@@ -733,6 +843,7 @@
 		bulkBusy = true;
 		try {
 			await bulkDeleteSpirits([...selectedSpiritIDs]);
+			memorialRevisionStore.invalidate();
 			toastStore.success(`Đã xóa mềm ${selectedCount} Hương linh`);
 			bulkDeleteOpen = false;
 			deleteConfirmation = '';
@@ -947,7 +1058,7 @@
 					{#if areaId && tablets.length === 0}<p
 							class="mt-1 text-xs text-[var(--color-text-secondary)]"
 						>
-							Hãy tạo bài vị trong mục Cơ cấu tổ chức trước.
+							Hãy tạo bài vị trong mục Bài vị trước.
 						</p>{/if}
 				</div>
 			{:else if desktopView === 'table'}<div class="min-h-0 flex-1 overflow-y-auto md:hidden">
@@ -1413,14 +1524,31 @@
 {#snippet spiritTable()}<div
 		class="hidden min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] md:block"
 	>
-		<table class="min-w-[2480px] table-fixed text-left text-xs">
+		<table
+			class="table-fixed text-left text-xs"
+			style={`width: ${tableWidth}px; min-width: ${tableWidth}px;`}
+		>
+			<colgroup>
+				{#if canWrite}<col style="width: 40px;" />{/if}
+				<col style="width: 56px;" />
+				{#each tableSpiritColumns as column (column.key)}<col style={`width: ${columnWidth(column)}px;`} />{/each}
+				{#if canWrite}<col style="width: 128px;" />{/if}
+			</colgroup>
 			<thead class="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]">
 				<tr>
 					{#if canWrite}<th class="sticky top-0 z-10 w-10 bg-[var(--color-surface-muted)] px-3 py-3"><input type="checkbox" checked={spirits.length > 0 && spirits.every((item) => selectedSpiritIDs.has(item.id))} onchange={toggleVisibleSelection} aria-label="Chọn tất cả Hương linh đang hiển thị" class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" /></th>{/if}
-					{#each spiritColumns as column (column.key)}<th
-							class={`${column.width} sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-3`}
+					<th class="sticky top-0 z-10 w-14 bg-[var(--color-surface-muted)] px-3 py-3 text-right font-semibold">STT</th>
+					{#each tableSpiritColumns as column (column.key)}<th
+							class="relative sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-3"
 						>
-							{@render spiritSortHeader(column.label, column.key)}
+							{@render spiritSortHeader(column.label, column.key)}<button
+								type="button"
+								onpointerdown={(event) => beginColumnResize(event, column)}
+								onclick={(event) => event.stopPropagation()}
+								class="absolute top-0 right-0 z-30 h-full w-4 cursor-col-resize touch-none select-none before:absolute before:top-1/4 before:right-1 before:h-1/2 before:w-px before:bg-[var(--color-border-strong)] hover:before:bg-[var(--color-primary)]"
+								aria-label={`Kéo để đổi độ rộng cột ${column.label}`}
+								title="Kéo để đổi độ rộng"
+							></button>
 						</th>{/each}
 					{#if canWrite}<th
 							class="sticky top-0 z-10 w-32 bg-[var(--color-surface-muted)] px-3 py-3 text-right font-semibold"
@@ -1429,9 +1557,16 @@
 				</tr>
 			</thead>
 			<tbody class="divide-y divide-[var(--color-border)]">
-				{#each sortedSpirits as item (item.id)}<tr class="hover:bg-[var(--color-primary-soft)]/40">
+				{#each tableSpiritGroups as group (group.key)}
+					{#each group.items as item, itemIndex (item.id)}<tr ondblclick={(event) => openSpiritEditorFromRow(event, item)} class={['hover:bg-[var(--color-primary-soft)]/40', canWrite && 'cursor-default']}>
 						{#if canWrite}<td class="px-3 py-2 align-middle"><input type="checkbox" checked={selectedSpiritIDs.has(item.id)} onchange={() => toggleSpiritSelection(item.id)} aria-label={`Chọn ${item.full_name}`} class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" /></td>{/if}
-						{#each spiritColumns as column (column.key)}<td class="relative px-3 py-2 align-middle">
+						<td class="px-3 py-2 text-right align-middle tabular-nums text-[var(--color-text-secondary)]">{tableRowNumbers.get(item.id)}</td>
+						{#each tableSpiritColumns as column (column.key)}
+							{#if group.hasPosition && (column.key === 'position_name' || column.key === 'tablet_name' || column.key === 'house_name')}
+								{#if itemIndex === 0}<td rowspan={group.items.length} class="bg-[var(--color-surface-muted)]/35 px-3 py-2 align-middle font-medium">
+									<span class="block w-full truncate" title={item[column.key] || ''}>{item[column.key] || '—'}</span>
+								</td>{/if}
+							{:else}<td class="relative px-3 py-2 align-middle">
 								{#if column.key === 'image_url'}
 									<button
 											type="button"
@@ -1441,14 +1576,14 @@
 											aria-label={`Xem ảnh ${item.full_name}`}
 											><SpiritPortrait imageUrl={item.image_url} alt={item.full_name} sizeClass="h-14 w-10" showErrorAlt /></button>
 								{:else if column.key === 'created_at' || column.key === 'updated_at'}<span
-										class="whitespace-nowrap">{formatTimestamp(item[column.key])}</span
+										class="block w-full truncate whitespace-nowrap">{formatTimestamp(item[column.key])}</span
 									>{:else if canWrite && editablePatchKeys.has(column.key)}<button
 										type="button"
 										onclick={() => beginCellEdit(item, column)}
-										class="inline-block max-w-full cursor-pointer truncate rounded-sm text-left transition-colors hover:bg-[var(--color-primary-soft)]"
+									class="block w-full cursor-pointer truncate rounded-sm text-left transition-colors hover:bg-[var(--color-primary-soft)]"
 										title={item[column.key] || ''}>{item[column.key] || '—'}</button
 									>{:else}<span
-										class="inline-block max-w-full truncate"
+									class="block w-full truncate"
 										title={item[column.key] || ''}>{item[column.key] || '—'}</span
 									>{/if}
 								{#if cellEdit?.id === item.id && cellEdit.key === column.key}<form
@@ -1485,7 +1620,7 @@
 											>
 										</div>
 									</form>{/if}
-							</td>{/each}
+							</td>{/if}{/each}
 						{#if canWrite}<td class="px-3 py-2 align-middle">
 								<div class="flex justify-end gap-1">
 									<button
@@ -1507,6 +1642,7 @@
 								</div>
 							</td>{/if}
 					</tr>{/each}
+				{/each}
 			</tbody>
 		</table>
 		{@render loadMoreButton()}

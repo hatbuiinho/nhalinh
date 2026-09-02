@@ -180,6 +180,24 @@ func (s *PostgresStore) UpdatePosition(ctx context.Context, v Position) (Positio
 	e := s.pool.QueryRow(ctx, `UPDATE memorial_positions SET area_id=$2,name=$3,row_number=$4,column_number=$5,notes=$6,updated_at=$7 WHERE id=$1 RETURNING id,area_id,name,row_number,column_number,notes,created_at,updated_at`, v.ID, v.AreaID, v.Name, v.RowNumber, v.ColumnNumber, v.Notes, v.UpdatedAt).Scan(&v.ID, &v.AreaID, &v.Name, &v.RowNumber, &v.ColumnNumber, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
+func (s *PostgresStore) DeletePosition(ctx context.Context, id string, now time.Time) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if _, err = tx.Exec(ctx, `UPDATE memorial_tablets SET position_id=NULL,updated_at=$2 WHERE position_id=$1`, id, now); err != nil {
+		return mapErr(err)
+	}
+	r, err := tx.Exec(ctx, `DELETE FROM memorial_positions WHERE id=$1`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	if r.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit(ctx)
+}
 
 func (s *PostgresStore) ListOccupancyPositions(ctx context.Context, _ Actor, houseID string) ([]Position, int, error) {
 	rows, err := s.pool.Query(ctx, `WITH position_stats AS (
@@ -231,6 +249,32 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 		out = append(out, v)
 	}
 	return out, rows.Err()
+}
+func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseID, query string) ([]Tablet, error) {
+	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.name)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.name`, houseID, query)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	out := []Tablet{}
+	for rows.Next() {
+		var v Tablet
+		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
+			return nil, err
+		}
+		out = append(out, v)
+	}
+	return out, rows.Err()
+}
+func (s *PostgresStore) MoveTablet(ctx context.Context, tabletID, positionID string, now time.Time) error {
+	r, err := s.pool.Exec(ctx, `UPDATE memorial_tablets SET position_id=$2,updated_at=$3 WHERE id=$1`, tabletID, positionID, now)
+	if err != nil {
+		return mapErr(err)
+	}
+	if r.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
 }
 
 func (s *PostgresStore) ImportLookup(ctx context.Context, houseID string) ([]Area, []Position, []Tablet, error) {
@@ -436,7 +480,7 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 			continue
 		}
 		tabletsByKey[key] = newID("import-tablet")
-		newTablets = append(newTablets, Tablet{ID: tabletsByKey[key], PositionID: positionID, Name: row.tabletName, CreatedAt: now, UpdatedAt: now})
+		newTablets = append(newTablets, Tablet{ID: tabletsByKey[key], HouseID: houseID, PositionID: positionID, Name: row.tabletName, CreatedAt: now, UpdatedAt: now})
 	}
 	result.CreatedTabletCount = len(newTablets)
 	if len(newTablets) > 0 {
@@ -444,9 +488,9 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 		if marshalErr != nil {
 			return SpiritImportResult{}, marshalErr
 		}
-		if _, err = tx.Exec(ctx, `INSERT INTO memorial_tablets(id,position_id,name,notes,created_at,updated_at)
-			SELECT x.id,x.position_id,x.name,x.notes,x.created_at,x.updated_at
-			FROM jsonb_to_recordset($1::jsonb) AS x(id text,position_id text,name text,notes text,created_at timestamptz,updated_at timestamptz)
+		if _, err = tx.Exec(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at)
+			SELECT x.id,x.house_id,x.position_id,x.name,x.notes,x.created_at,x.updated_at
+			FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,position_id text,name text,notes text,created_at timestamptz,updated_at timestamptz)
 			ON CONFLICT (position_id,name) DO NOTHING`, string(data)); err != nil {
 			return SpiritImportResult{}, mapErr(err)
 		}
@@ -497,7 +541,7 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 	return result, nil
 }
 func (s *PostgresStore) CreateTablet(ctx context.Context, v Tablet) (Tablet, error) {
-	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,position_id,name,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
+	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7) RETURNING id,house_id,position_id,name,notes,created_at,updated_at`, v.ID, v.HouseID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
 func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Tablet, error) {
@@ -505,10 +549,10 @@ func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Ta
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `INSERT INTO memorial_tablets(id,position_id,name,notes,created_at,updated_at)
-		SELECT x.id,x.position_id,x.name,x.notes,x.created_at,x.updated_at
-		FROM jsonb_to_recordset($1::jsonb) AS x(id text,position_id text,name text,notes text,created_at timestamptz,updated_at timestamptz)
-		ON CONFLICT DO NOTHING RETURNING id,position_id,name,notes,created_at,updated_at`, string(data))
+	rows, err := s.pool.Query(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at)
+		SELECT x.id,x.house_id,NULLIF(x.position_id,''),x.name,x.notes,x.created_at,x.updated_at
+		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,position_id text,name text,notes text,created_at timestamptz,updated_at timestamptz)
+		ON CONFLICT DO NOTHING RETURNING id,house_id,position_id,name,notes,created_at,updated_at`, string(data))
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -516,7 +560,7 @@ func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Ta
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if err = rows.Scan(&v.ID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err = rows.Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -529,7 +573,7 @@ func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, s
 		return Tablet{}, fmt.Errorf("begin create tablet: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6) RETURNING id,position_id,name,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,house_id,position_id,name,notes,created_at,updated_at`, v.ID, houseID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
 	if len(existingSpiritIDs) > 0 {
@@ -604,6 +648,29 @@ func (s *PostgresStore) UpdateTabletWithSpirits(ctx context.Context, v Tablet, s
 	}
 	v.SpiritCount = len(spirits)
 	return v, nil
+}
+func (s *PostgresStore) DeleteTablet(ctx context.Context, id string, deleteSpirits bool, now time.Time) error {
+	tx, err := s.pool.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer func() { _ = tx.Rollback(ctx) }()
+	if deleteSpirits {
+		_, err = tx.Exec(ctx, `UPDATE spirits SET tablet_id=NULL,deleted_at=COALESCE(deleted_at,$2),updated_at=$2 WHERE tablet_id=$1`, id, now)
+	} else {
+		_, err = tx.Exec(ctx, `UPDATE spirits SET tablet_id=NULL,updated_at=$2 WHERE tablet_id=$1`, id, now)
+	}
+	if err != nil {
+		return mapErr(err)
+	}
+	result, err := tx.Exec(ctx, `DELETE FROM memorial_tablets WHERE id=$1`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	if result.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return tx.Commit(ctx)
 }
 
 const spiritCols = `s.id,COALESCE(s.tablet_id,''),h.id,h.name,COALESCE(a.id,''),COALESCE(a.code,''),COALESCE(p.id,''),COALESCE(p.name,''),COALESCE(t.name,''),s.full_name,s.dharma_name,s.birth_year,s.death_year,s.age,s.image_url,s.burial_place,s.sender,s.sent_month,s.notes,s.has_urn,s.created_at,s.updated_at`
@@ -684,7 +751,7 @@ func (s *PostgresStore) HouseIDForArea(ctx context.Context, id string) (string, 
 }
 func (s *PostgresStore) HouseIDForTablet(ctx context.Context, id string) (string, error) {
 	var h string
-	e := s.pool.QueryRow(ctx, `SELECT a.house_id FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id WHERE t.id=$1`, id).Scan(&h)
+	e := s.pool.QueryRow(ctx, `SELECT house_id FROM memorial_tablets WHERE id=$1`, id).Scan(&h)
 	return h, mapErr(e)
 }
 func (s *PostgresStore) HouseIDForPosition(ctx context.Context, id string) (string, error) {

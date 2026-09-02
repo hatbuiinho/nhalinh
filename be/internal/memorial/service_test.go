@@ -227,6 +227,46 @@ func TestCreateTabletAttachesExistingUnplacedSpiritsAtomically(t *testing.T) {
 	}
 }
 
+func TestDeletePositionKeepsTabletsUnplacedAndTheyCanBeMoved(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 9, 2, 0, 0, 0, 0, time.UTC) })
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh chuyển bài vị"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	area, err := service.CreateArea(ctx, admin, AreaInput{HouseID: house.ID, Code: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	from, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	to, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 1, ColumnNumber: 2})
+	if err != nil {
+		t.Fatal(err)
+	}
+	tablet, err := service.CreateTablet(ctx, admin, TabletInput{PositionID: from.ID, Name: "Bài vị giữ lại", Spirits: []SpiritInput{{FullName: "Nguyễn Văn A"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if err = service.DeletePosition(ctx, admin, from.ID); err != nil {
+		t.Fatal(err)
+	}
+	unplaced, err := service.ListUnplacedTablets(ctx, admin, house.ID, "giu lai")
+	if err != nil || len(unplaced) != 1 || unplaced[0].ID != tablet.ID || unplaced[0].SpiritCount != 1 {
+		t.Fatalf("unexpected unplaced tablets: %#v, err=%v", unplaced, err)
+	}
+	if err = service.MoveTablet(ctx, admin, tablet.ID, to.ID); err != nil {
+		t.Fatal(err)
+	}
+	placed, err := service.ListTablets(ctx, admin, to.ID)
+	if err != nil || len(placed) != 1 || placed[0].ID != tablet.ID {
+		t.Fatalf("unexpected moved tablet: %#v, err=%v", placed, err)
+	}
+}
+
 func TestEditorAndViewerRespectHouseScope(t *testing.T) {
 	ctx := context.Background()
 	store := NewMemoryStore()

@@ -199,6 +199,8 @@ export const updatePosition = (
 		method: 'PUT',
 		body: JSON.stringify(input)
 	});
+export const deletePosition = (id: string) =>
+	apiRequest<void>(`/api/memorial-positions/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const getOccupancy = (houseId: string) =>
 	apiRequest<Occupancy>(`/api/memorial-occupancy?house_id=${encodeURIComponent(houseId)}`);
 export const listTablets = async (positionId: string) =>
@@ -207,6 +209,10 @@ export const listTablets = async (positionId: string) =>
 			`/api/memorial-tablets?position_id=${encodeURIComponent(positionId)}`
 		)
 	).tablets;
+export const listUnplacedTablets = async (houseId: string, query = '') => {
+	const params = new URLSearchParams({ house_id: houseId, unplaced: 'true', q: query });
+	return (await apiRequest<{ tablets: Tablet[] }>(`/api/memorial-tablets?${params.toString()}`)).tablets;
+};
 export const createTablet = (input: {
 	position_id: string;
 	name: string;
@@ -227,6 +233,16 @@ export const updateTablet = (
 		method: 'PUT',
 		body: JSON.stringify(input)
 	});
+export const moveTablet = (id: string, positionId: string) =>
+	apiRequest<void>(`/api/memorial-tablets/${encodeURIComponent(id)}`, {
+		method: 'PATCH',
+		body: JSON.stringify({ position_id: positionId })
+	});
+export const deleteTablet = (id: string, deleteSpirits = false) =>
+	apiRequest<void>(
+		`/api/memorial-tablets/${encodeURIComponent(id)}?delete_spirits=${deleteSpirits}`,
+		{ method: 'DELETE' }
+	);
 export const listTabletSpirits = async (tabletId: string) =>
 	(
 		await apiRequest<{ spirits: Spirit[] }>(

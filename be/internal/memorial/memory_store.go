@@ -299,6 +299,22 @@ func (s *MemoryStore) UpdatePosition(_ context.Context, v Position) (Position, e
 	s.positions[v.ID] = v
 	return v, nil
 }
+func (s *MemoryStore) DeletePosition(_ context.Context, id string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.positions[id]; !ok {
+		return ErrNotFound
+	}
+	for tabletID, tablet := range s.tablets {
+		if tablet.PositionID == id {
+			tablet.PositionID = ""
+			tablet.UpdatedAt = now
+			s.tablets[tabletID] = tablet
+		}
+	}
+	delete(s.positions, id)
+	return nil
+}
 func (s *MemoryStore) ListTablets(_ context.Context, _ Actor, positionID string) ([]Tablet, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -326,6 +342,38 @@ func (s *MemoryStore) ListTablets(_ context.Context, _ Actor, positionID string)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
 	return out, nil
+}
+func (s *MemoryStore) ListUnplacedTablets(_ context.Context, _ Actor, houseID, query string) ([]Tablet, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	query = fold(query)
+	out := []Tablet{}
+	for _, tablet := range s.tablets {
+		if tablet.HouseID != houseID || tablet.PositionID != "" || (query != "" && !strings.Contains(fold(tablet.Name), query)) {
+			continue
+		}
+		tablet.HouseName = s.houses[houseID].Name
+		for _, spirit := range s.spirits {
+			if spirit.TabletID == tablet.ID && spirit.DeletedAt == nil {
+				tablet.SpiritCount++
+			}
+		}
+		out = append(out, tablet)
+	}
+	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })
+	return out, nil
+}
+func (s *MemoryStore) MoveTablet(_ context.Context, tabletID, positionID string, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	tablet, ok := s.tablets[tabletID]
+	if !ok {
+		return ErrNotFound
+	}
+	tablet.PositionID = positionID
+	tablet.UpdatedAt = now
+	s.tablets[tabletID] = tablet
+	return nil
 }
 func (s *MemoryStore) CreateTablet(_ context.Context, v Tablet) (Tablet, error) {
 	s.mu.Lock()
@@ -413,6 +461,26 @@ func (s *MemoryStore) UpdateTabletWithSpirits(_ context.Context, v Tablet, spiri
 	}
 	v.SpiritCount = len(spirits)
 	return v, nil
+}
+func (s *MemoryStore) DeleteTablet(_ context.Context, id string, deleteSpirits bool, now time.Time) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.tablets[id]; !ok {
+		return ErrNotFound
+	}
+	for spiritID, spirit := range s.spirits {
+		if spirit.TabletID != id {
+			continue
+		}
+		spirit.TabletID = ""
+		spirit.UpdatedAt = now
+		if deleteSpirits && spirit.DeletedAt == nil {
+			spirit.DeletedAt = &now
+		}
+		s.spirits[spiritID] = spirit
+	}
+	delete(s.tablets, id)
+	return nil
 }
 func (s *MemoryStore) ListSpirits(_ context.Context, a Actor, o SearchOptions) ([]Spirit, int, error) {
 	s.mu.RLock()
@@ -601,7 +669,13 @@ func (s *MemoryStore) HouseIDForTablet(_ context.Context, id string) (string, er
 	if !ok {
 		return "", ErrNotFound
 	}
-	p := s.positions[t.PositionID]
+	if t.HouseID != "" {
+		return t.HouseID, nil
+	}
+	p, ok := s.positions[t.PositionID]
+	if !ok {
+		return "", ErrNotFound
+	}
 	return s.areas[p.AreaID].HouseID, nil
 }
 func (s *MemoryStore) HouseIDForSpirit(_ context.Context, id string) (string, error) {
@@ -615,6 +689,9 @@ func (s *MemoryStore) HouseIDForSpirit(_ context.Context, id string) (string, er
 		return v.HouseID, nil
 	}
 	t := s.tablets[v.TabletID]
+	if t.PositionID == "" {
+		return t.HouseID, nil
+	}
 	p := s.positions[t.PositionID]
 	return s.areas[p.AreaID].HouseID, nil
 }
@@ -625,6 +702,13 @@ func (s *MemoryStore) join(v Spirit) Spirit {
 		return v
 	}
 	t := s.tablets[v.TabletID]
+	if t.PositionID == "" {
+		h := s.houses[t.HouseID]
+		v.TabletName = t.Name
+		v.HouseID = t.HouseID
+		v.HouseName = h.Name
+		return v
+	}
 	p := s.positions[t.PositionID]
 	a := s.areas[p.AreaID]
 	h := s.houses[a.HouseID]
