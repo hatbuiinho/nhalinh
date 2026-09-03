@@ -230,7 +230,7 @@
 		const items = await listTablets(selectedID);
 		const previews = new Map(
 			await Promise.all(
-				items.map(async (tablet) => [tablet.id, (await listTabletSpirits(tablet.id)).slice(0, 5)] as const)
+				items.map(async (tablet) => [tablet.id, await listTabletSpirits(tablet.id)] as const)
 			)
 		);
 		cachePositionTablets(selectedID, { tablets: items, previews });
@@ -880,7 +880,7 @@
 								<p class="mt-1 text-xs text-[var(--color-text-secondary)]">
 									{tablet.spirit_count} Hương linh
 								</p>
-								{#if tabletSpiritPreviews.get(tablet.id)?.length}<div class="mt-2 space-y-0.5 text-sm text-[var(--color-text-secondary)]">{#each tabletSpiritPreviews.get(tablet.id) ?? [] as spirit (spirit.id)}<p class="truncate">{spirit.full_name}</p>{/each}{#if tablet.spirit_count > 5}<p class="font-medium text-[var(--color-primary-dark)]">+{tablet.spirit_count - 5} Hương linh</p>{/if}</div>{/if}
+								{#if tabletSpiritPreviews.get(tablet.id)?.length}<div class="mt-2 space-y-0.5 text-sm text-[var(--color-text-secondary)]">{#each tabletSpiritPreviews.get(tablet.id) ?? [] as spirit (spirit.id)}<p>{spirit.full_name}</p>{/each}</div>{/if}
 							</button>
 							{#if canWrite}<div class="mt-3 flex justify-end gap-4"><button type="button" onclick={() => openTabletMove(tablet)} class="text-xs font-semibold text-[var(--color-primary-dark)]">Chuyển vị trí</button><button type="button" onclick={() => openTabletDelete(tablet)} class="text-xs font-semibold text-[var(--color-danger)]">Xoá bài vị</button></div>{/if}
 						</div>{/each}
