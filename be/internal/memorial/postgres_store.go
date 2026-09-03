@@ -683,7 +683,13 @@ func (s *PostgresStore) ListSpirits(ctx context.Context, a Actor, o SearchOption
 	if e := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter, args...).Scan(&total); e != nil {
 		return nil, 0, e
 	}
-	rows, e := s.pool.Query(ctx, `SELECT `+spiritCols+` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter+` ORDER BY s.full_name,s.id LIMIT $12 OFFSET $13`, append(args, o.Limit, o.Offset)...)
+	rows, e := s.pool.Query(ctx, `SELECT `+spiritCols+` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter+` ORDER BY CASE
+		WHEN $8='' THEN 0
+		WHEN unaccent(lower(s.full_name))=unaccent(lower($8)) THEN 0
+		WHEN unaccent(lower(s.full_name)) LIKE unaccent(lower($8))||'%' THEN 1
+		WHEN unaccent(lower(s.full_name)) LIKE '%'||unaccent(lower($8))||'%' THEN 2
+		ELSE 3
+	END,s.full_name,s.id LIMIT $12 OFFSET $13`, append(args, o.Limit, o.Offset)...)
 	if e != nil {
 		return nil, 0, e
 	}

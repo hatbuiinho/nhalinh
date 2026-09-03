@@ -507,7 +507,13 @@ func (s *MemoryStore) ListSpirits(_ context.Context, a Actor, o SearchOptions) (
 		}
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool { return out[i].FullName < out[j].FullName })
+	sort.Slice(out, func(i, j int) bool {
+		leftRank, rightRank := spiritNameSearchRank(out[i].FullName, q), spiritNameSearchRank(out[j].FullName, q)
+		if leftRank != rightRank {
+			return leftRank < rightRank
+		}
+		return out[i].FullName < out[j].FullName
+	})
 	total := len(out)
 	start := min(o.Offset, total)
 	end := min(start+o.Limit, total)
@@ -729,4 +735,21 @@ func fold(v string) string {
 		}
 		return unicode.ToLower(r)
 	}, norm.NFD.String(value))
+}
+
+func spiritNameSearchRank(name, query string) int {
+	if query == "" {
+		return 0
+	}
+	name = fold(name)
+	switch {
+	case name == query:
+		return 0
+	case strings.HasPrefix(name, query):
+		return 1
+	case strings.Contains(name, query):
+		return 2
+	default:
+		return 3
+	}
 }

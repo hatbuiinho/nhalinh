@@ -66,6 +66,7 @@
 	>;
 	type SpiritColumn = { key: SpiritSortKey; label: string; defaultWidth: number };
 	type SpiritTableGroup = { key: string; items: Spirit[]; hasPosition: boolean };
+	type HighlightSegment = { text: string; match: boolean };
 	type EditablePatchKey = Extract<
 		SpiritSortKey,
 		| 'full_name'
@@ -207,7 +208,11 @@
 			groups.set(key, group);
 		}
 		const direction = spiritSortDirection === 'asc' ? 1 : -1;
+		const searchQuery = foldSearchText(query);
 		const compare = (left: Spirit, right: Spirit) => {
+			const leftRank = spiritNameSearchRank(left.full_name, searchQuery);
+			const rightRank = spiritNameSearchRank(right.full_name, searchQuery);
+			if (leftRank !== rightRank) return leftRank - rightRank;
 			const result = vietnameseCollator.compare(
 				String(left[spiritSortKey] ?? ''),
 				String(right[spiritSortKey] ?? '')
@@ -218,7 +223,7 @@
 		for (const group of groups.values()) group.items.sort(compare);
 		const items = [...groups.values()];
 		items.sort((left, right) => {
-			if (placementSort.has(spiritSortKey)) return compare(left.items[0], right.items[0]);
+			if (searchQuery || placementSort.has(spiritSortKey)) return compare(left.items[0], right.items[0]);
 			return vietnameseCollator.compare(left.items[0].position_name || 'ZZZ', right.items[0].position_name || 'ZZZ');
 		});
 		return items;
@@ -351,6 +356,58 @@
 	}
 	function formatTimestamp(value: string) {
 		return value ? new Intl.DateTimeFormat('vi-VN').format(new Date(value)) : '—';
+	}
+	function foldSearchText(value: string) {
+		return foldSearchCharacters(value).trim();
+	}
+	function foldSearchCharacters(value: string) {
+		return value
+			.normalize('NFD')
+			.replace(/[\u0300-\u036f]/g, '')
+			.toLowerCase()
+			.replace(/đ/g, 'd')
+			.replace(/-/g, '');
+	}
+	function spiritNameSearchRank(name: string, searchQuery: string) {
+		if (!searchQuery) return 0;
+		const foldedName = foldSearchText(name);
+		if (foldedName === searchQuery) return 0;
+		if (foldedName.startsWith(searchQuery)) return 1;
+		if (foldedName.includes(searchQuery)) return 2;
+		return 3;
+	}
+	function highlightSegments(value: string, rawQuery: string): HighlightSegment[] {
+		const searchQuery = foldSearchText(rawQuery);
+		if (!value || !searchQuery) return [{ text: value, match: false }];
+		let folded = '';
+		const starts: number[] = [];
+		const ends: number[] = [];
+		for (let offset = 0; offset < value.length; ) {
+			const codePoint = value.codePointAt(offset);
+			if (codePoint === undefined) break;
+			const char = String.fromCodePoint(codePoint);
+			const end = offset + char.length;
+			const normalized = foldSearchCharacters(char);
+			for (const unit of normalized) {
+				folded += unit;
+				starts.push(offset);
+				ends.push(end);
+			}
+			offset = end;
+		}
+		const segments: HighlightSegment[] = [];
+		let originalOffset = 0;
+		let matchIndex = folded.indexOf(searchQuery);
+		while (matchIndex >= 0) {
+			const start = starts[matchIndex];
+			const end = ends[matchIndex + searchQuery.length - 1];
+			if (start > originalOffset) segments.push({ text: value.slice(originalOffset, start), match: false });
+			if (end > originalOffset) segments.push({ text: value.slice(Math.max(start, originalOffset), end), match: true });
+			originalOffset = end;
+			matchIndex = folded.indexOf(searchQuery, matchIndex + searchQuery.length);
+		}
+		if (originalOffset < value.length) segments.push({ text: value.slice(originalOffset), match: false });
+		return segments.length ? segments : [{ text: value, match: false }];
 	}
 	function beginCellEdit(item: Spirit, column: SpiritColumn) {
 		if (!canWrite || !editablePatchKeys.has(column.key)) return;
@@ -1472,6 +1529,10 @@
 		/></label
 	>{/snippet}
 
+{#snippet highlight(value: string)}{#each highlightSegments(value, query) as segment}
+	{#if segment.match}<mark class="rounded-sm bg-amber-200/90 px-px font-semibold text-amber-950">{segment.text}</mark>{:else}{segment.text}{/if}
+{/each}{/snippet}
+
 {#snippet spiritCard(item: Spirit)}<li
 		class="rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] p-4"
 	>
@@ -1485,14 +1546,14 @@
 					aria-label={`Xem ảnh ${item.full_name}`}
 					><SpiritPortrait imageUrl={item.image_url} alt={item.full_name} sizeClass="h-20 w-15" /></button>
 			<div class="min-w-0 flex-1">
-				<h3 class="truncate font-semibold">{item.full_name}</h3>
+				<h3 class="truncate font-semibold">{@render highlight(item.full_name)}</h3>
 				<p class="truncate text-sm text-[var(--color-text-secondary)]">
-					{item.dharma_name || 'Chưa có pháp danh'}
+					{@render highlight(item.dharma_name || 'Chưa có pháp danh')}
 				</p>
 				<p class="mt-1 text-xs font-semibold text-[var(--color-primary-dark)]">
-					{item.position_id
+					{@render highlight(item.position_id
 						? `Khu ${item.area_code} · ${item.position_name} · ${item.tablet_name}`
-						: 'Chưa xếp vị trí'}
+						: 'Chưa xếp vị trí')}
 				</p>
 			</div>
 		</div>
@@ -1502,9 +1563,9 @@
 			<dt class="text-[var(--color-text-muted)]">Năm sinh – mất</dt>
 			<dd class="text-right">{item.birth_year || '?'} – {item.death_year || '?'}</dd>
 			<dt class="text-[var(--color-text-muted)]">Người gửi</dt>
-			<dd class="truncate text-right">{item.sender || '—'}</dd>
+			<dd class="truncate text-right">{@render highlight(item.sender || '—')}</dd>
 			<dt class="text-[var(--color-text-muted)]">Nơi an táng</dt>
-			<dd class="truncate text-right">{item.burial_place || '—'}</dd>
+			<dd class="truncate text-right">{@render highlight(item.burial_place || '—')}</dd>
 		</dl>
 		{#if canWrite}<div class="mt-3 flex justify-end gap-2">
 				<button
@@ -1564,7 +1625,7 @@
 						{#each tableSpiritColumns as column (column.key)}
 							{#if group.hasPosition && (column.key === 'position_name' || column.key === 'tablet_name' || column.key === 'house_name')}
 								{#if itemIndex === 0}<td rowspan={group.items.length} class="bg-[var(--color-surface-muted)]/35 px-3 py-2 align-middle font-medium">
-									<span class="block w-full truncate" title={item[column.key] || ''}>{item[column.key] || '—'}</span>
+									<span class="block w-full truncate" title={item[column.key] || ''}>{@render highlight(item[column.key] || '—')}</span>
 								</td>{/if}
 							{:else}<td class="relative px-3 py-2 align-middle">
 								{#if column.key === 'image_url'}
@@ -1576,15 +1637,15 @@
 											aria-label={`Xem ảnh ${item.full_name}`}
 											><SpiritPortrait imageUrl={item.image_url} alt={item.full_name} sizeClass="h-14 w-10" showErrorAlt /></button>
 								{:else if column.key === 'created_at' || column.key === 'updated_at'}<span
-										class="block w-full truncate whitespace-nowrap">{formatTimestamp(item[column.key])}</span
+										class="block w-full truncate whitespace-nowrap">{@render highlight(formatTimestamp(item[column.key]))}</span
 									>{:else if canWrite && editablePatchKeys.has(column.key)}<button
 										type="button"
 										onclick={() => beginCellEdit(item, column)}
 									class="block w-full cursor-pointer truncate rounded-sm text-left transition-colors hover:bg-[var(--color-primary-soft)]"
-										title={item[column.key] || ''}>{item[column.key] || '—'}</button
+										title={item[column.key] || ''}>{@render highlight(item[column.key] || '—')}</button
 									>{:else}<span
 									class="block w-full truncate"
-										title={item[column.key] || ''}>{item[column.key] || '—'}</span
+										title={item[column.key] || ''}>{@render highlight(item[column.key] || '—')}</span
 									>{/if}
 								{#if cellEdit?.id === item.id && cellEdit.key === column.key}<form
 										bind:this={cellEditRoot}

@@ -113,6 +113,35 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	}
 }
 
+func TestSpiritSearchPrioritizesFullName(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh tìm kiếm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	exact, err := service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "An"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	prefix, err := service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "An Bình"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	other, err := service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "Trần Cường", Sender: "An"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	items, total, err := service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, Query: "an", Limit: 20})
+	if err != nil || total != 3 || len(items) != 3 {
+		t.Fatalf("unexpected search result: total=%d items=%#v err=%v", total, items, err)
+	}
+	if items[0].ID != exact.ID || items[1].ID != prefix.ID || items[2].ID != other.ID {
+		t.Fatalf("full-name matches must be first, got %#v", items)
+	}
+}
+
 func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
 	ctx := context.Background()
 	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC) })
