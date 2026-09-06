@@ -45,12 +45,12 @@
 	}
 </script>
 
-<div class={compact ? 'flex items-center gap-2' : 'flex items-start gap-4'}>
+<div class={compact ? 'flex items-center gap-2 overflow-visible pb-3' : 'flex items-start gap-4'}>
 	<button
 		type="button"
 		onclick={() => imageUrl && (lightboxOpen = true)}
 		class={[
-			'relative grid aspect-[3/4] shrink-0 place-items-center',
+			'relative grid aspect-[3/4] shrink-0 place-items-center overflow-visible',
 			compact ? 'w-12 text-sm' : 'w-28 text-2xl'
 		]}
 		><SpiritPortrait imageUrl={imageUrl} alt={displayName} sizeClass="h-full w-full" />{#if uploading}<span

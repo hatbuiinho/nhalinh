@@ -145,16 +145,20 @@ func (s *MemoryStore) ListPositions(_ context.Context, _ Actor, areaID string) (
 		v.AreaCode = a.Code
 		v.HouseID = h.ID
 		v.HouseName = h.Name
+		spiritNames := []string{}
 		for _, t := range s.tablets {
 			if t.PositionID == v.ID {
 				v.TabletCount++
 				for _, spirit := range s.spirits {
-					if spirit.TabletID == t.ID {
+					if spirit.TabletID == t.ID && spirit.DeletedAt == nil {
 						v.SpiritCount++
+						spiritNames = append(spiritNames, spirit.FullName)
 					}
 				}
 			}
 		}
+		sort.Strings(spiritNames)
+		v.SpiritNames = spiritNames
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {

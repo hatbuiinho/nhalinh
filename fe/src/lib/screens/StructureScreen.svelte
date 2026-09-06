@@ -88,9 +88,11 @@
 		movePositionResults = $state<Position[]>([]),
 		mode = $state<Mode>('');
 	let editingPosition = $state<Position | null>(null);
+	let pendingTabletCoordinate = $state<{ rowNumber: number; columnNumber: number } | null>(null);
 	let newPositions = $state<EditablePositionRow[]>([emptyPositionRow()]);
 	let drawerPosition = $state<Position | null>(null);
 	let editingTablet = $state<Tablet | null>(null);
+	let tabletNameInput = $state<HTMLInputElement | null>(null);
 	let tabletToDelete = $state<Tablet | null>(null);
 	let tabletSpiritPreviews = $state<Map<string, Spirit[]>>(new Map());
 	let positionTabletCache = $state<Map<string, CachedPositionTablets>>(new Map());
@@ -119,6 +121,14 @@
 			normalizeSearch(tablet.name).includes(normalizeSearch(unplacedTabletQuery))
 		)
 	);
+	$effect(() => {
+		if (mode !== 'tablet' || editingTablet || !tabletNameInput) return;
+		const frame = requestAnimationFrame(() => {
+			tabletNameInput?.focus();
+			tabletNameInput?.setSelectionRange(tabletForm.name.length, tabletForm.name.length);
+		});
+		return () => cancelAnimationFrame(frame);
+	});
 	let filteredPositions = $derived.by(() => {
 		const query = normalizeSearch(positionQuery);
 		const items = positions.filter((position) =>
@@ -330,6 +340,11 @@
 	async function openPositionDrawer(position: Position) {
 		positionId = position.id;
 		drawerPosition = position;
+		if (canWrite && position.tablet_count === 0) {
+			drawerOpen = false;
+			await open('tablet');
+			return;
+		}
 		drawerOpen = true;
 		const cached = positionTabletCache.get(position.id);
 		if (cached) {
@@ -349,6 +364,13 @@
 			drawerLoading = false;
 		}
 	}
+	async function openTabletAtEmptyCoordinate(rowNumber: number, columnNumber: number) {
+		await open('tablet');
+		positionId = '';
+		drawerPosition = null;
+		drawerOpen = false;
+		pendingTabletCoordinate = { rowNumber, columnNumber };
+	}
 	async function open(next: Mode) {
 		mode = next;
 		if (next !== 'position') editingPosition = null;
@@ -366,6 +388,7 @@
 		}
 		if (next === 'tablet') {
 			editingTablet = null;
+			pendingTabletCoordinate = null;
 			selectedUnplacedSpirits = [];
 			tabletForm = { name: '', spirits: [emptyInlineSpirit()] };
 		}
@@ -457,11 +480,33 @@
 				await selectPosition();
 				editingPosition = null;
 			} else if (mode === 'tablet') {
+				let targetPositionID = positionId;
+				if (!editingTablet && pendingTabletCoordinate) {
+					const created = await createPositions(areaId, [
+						{
+							row_number: pendingTabletCoordinate.rowNumber,
+							column_number: pendingTabletCoordinate.columnNumber,
+							notes: ''
+						}
+					]);
+					targetPositionID = created.positions[0]?.id ?? '';
+					if (!targetPositionID) {
+						const refreshedPositions = await listPositions(areaId);
+						targetPositionID =
+							refreshedPositions.find(
+								(position) =>
+									position.row_number === pendingTabletCoordinate?.rowNumber &&
+									position.column_number === pendingTabletCoordinate?.columnNumber
+							)?.id ?? '';
+					}
+					if (!targetPositionID) throw new Error('Không thể tạo vị trí cho bài vị');
+					positionId = targetPositionID;
+				}
 				const spirits = tabletForm.spirits.filter((row) =>
 					Object.values(row).some((value) => value.trim())
 				);
 				const payload = {
-					position_id: positionId,
+					position_id: targetPositionID,
 					name: tabletForm.name,
 					notes: '',
 					spirits
@@ -473,11 +518,12 @@
 						existing_spirit_ids: selectedUnplacedSpirits.map((spirit) => spirit.id)
 					});
 				}
-				invalidatePositionTabletCache(positionId);
+				invalidatePositionTabletCache(targetPositionID);
 				await selectPosition(true);
 				areas = await listAreas(houseId);
 				positions = await listPositions(areaId);
 				editingTablet = null;
+				pendingTabletCoordinate = null;
 			}
 			toastStore.success(successMessage);
 			mode = '';
@@ -710,6 +756,10 @@
 							fullscreen={positionFullscreen}
 							areaCode={areas.find((area) => area.id === areaId)?.code ?? ''}
 							onposition={(position) => void openPositionDrawer(position)}
+							onemptyposition={canWrite
+								? ({ rowNumber, columnNumber }) =>
+									void openTabletAtEmptyCoordinate(rowNumber, columnNumber)
+								: undefined}
 						/>
 					{:else}<div
 							class={[
@@ -980,9 +1030,13 @@
 				{:else if mode === 'tablet'}<div
 						class="shrink-0 space-y-3 border-b border-[var(--color-border)] pb-3"
 					>
+						{#if pendingTabletCoordinate}<p class="rounded-md bg-[var(--color-primary-soft)] px-3 py-2 text-sm text-[var(--color-primary-dark)]">
+							Vị trí sẽ được tạo: {pendingTabletCoordinate.columnNumber}{areas.find((area) => area.id === areaId)?.code ?? ''}-{pendingTabletCoordinate.rowNumber}
+						</p>{/if}
 						<div>
 							<label class="block"
 								><span class="mb-1 block text-sm">Tên bài vị *</span><input
+									bind:this={tabletNameInput}
 									bind:value={tabletForm.name}
 									required={canWrite}
 									readonly={!canWrite}

@@ -24,6 +24,7 @@
 		listHouses,
 		listPositions,
 		listSpirits,
+		listTabletSpirits,
 		listTablets,
 		patchSpirit,
 		previewSpiritImport,
@@ -157,6 +158,10 @@
 		bulkValue = $state(''),
 		formOpen = $state(false),
 		editing = $state<Spirit | null>(null),
+		relatedTabletId = $state(''),
+		relatedTabletName = $state(''),
+		relatedSpirits = $state<Spirit[]>([]),
+		relatedSpiritsLoading = $state(false),
 		formHouseId = $state(''),
 		formPositionQuery = $state(''),
 		formPositions = $state<Position[]>([]),
@@ -167,7 +172,8 @@
 		timer: ReturnType<typeof setTimeout> | undefined,
 		positionTimer: ReturnType<typeof setTimeout> | undefined,
 		positionRequest = 0,
-		tabletRequest = 0;
+		tabletRequest = 0,
+		relatedSpiritsRequest = 0;
 	let columnWidths = $state<Record<string, number>>({});
 	let form = $state<SpiritInput>(emptyForm());
 	let newSpirits = $state<EditableSpiritInput[]>([emptyInlineSpirit()]);
@@ -625,6 +631,10 @@
 	}
 	function add() {
 		editing = null;
+		relatedTabletId = '';
+		relatedTabletName = '';
+		relatedSpirits = [];
+		relatedSpiritsRequest++;
 		form = emptyForm();
 		newSpirits = [emptyInlineSpirit()];
 		inlineEditorBusy = false;
@@ -641,7 +651,7 @@
 		tabletLoading = false;
 		formOpen = true;
 	}
-	async function edit(item: Spirit) {
+	function fillEditingForm(item: Spirit) {
 		editing = item;
 		formHouseId = item.house_id;
 		form = {
@@ -659,13 +669,39 @@
 			notes: item.notes
 		};
 		formPositionQuery = item.position_name;
-		formPositions = [];
 		selectedFormPosition = item.position_id
 			? { id: item.position_id, name: item.position_name }
 			: null;
-		formTablets = [];
 		quickCreateTablet = false;
+	}
+	async function loadRelatedSpirits(tabletId: string) {
+		const request = ++relatedSpiritsRequest;
+		if (!tabletId) {
+			relatedSpirits = [];
+			relatedSpiritsLoading = false;
+			return;
+		}
+		relatedSpiritsLoading = true;
+		try {
+			const items = await listTabletSpirits(tabletId);
+			if (request === relatedSpiritsRequest) {
+				relatedSpirits = items.sort((left, right) =>
+					vietnameseCollator.compare(left.full_name, right.full_name)
+				);
+			}
+		} finally {
+			if (request === relatedSpiritsRequest) relatedSpiritsLoading = false;
+		}
+	}
+	async function edit(item: Spirit) {
+		fillEditingForm(item);
+		relatedTabletId = item.tablet_id;
+		relatedTabletName = item.tablet_name;
+		relatedSpirits = [];
+		formPositions = [];
+		formTablets = [];
 		formOpen = true;
+		void loadRelatedSpirits(item.tablet_id);
 		if (!item.position_id) return;
 		const request = ++tabletRequest;
 		tabletLoading = true;
@@ -675,6 +711,39 @@
 		} finally {
 			if (request === tabletRequest) tabletLoading = false;
 		}
+	}
+	function selectRelatedSpirit(item: Spirit) {
+		if (!canWrite || saving || item.id === editing?.id) return;
+		fillEditingForm(item);
+	}
+	function addRelatedSpirit() {
+		const source = editing ?? relatedSpirits[0];
+		if (!source) return;
+		editing = null;
+		formHouseId = source.house_id;
+		form = { ...emptyForm(), house_id: source.house_id, tablet_id: source.tablet_id };
+		newSpirits = [emptyInlineSpirit()];
+		formPositionQuery = source.position_name;
+		selectedFormPosition = source.position_id
+			? { id: source.position_id, name: source.position_name }
+			: null;
+		formTablets = [
+			{
+				id: source.tablet_id,
+				position_id: source.position_id,
+				house_id: source.house_id,
+				house_name: source.house_name,
+				area_id: source.area_id,
+				area_code: source.area_code,
+				position_name: source.position_name,
+				row_number: 0,
+				column_number: 0,
+				name: source.tablet_name,
+				notes: '',
+				spirit_count: relatedSpirits.length
+			}
+		];
+		quickCreateTablet = false;
 	}
 	function openSpiritEditorFromRow(event: MouseEvent, item: Spirit) {
 		if (!canWrite) return;
@@ -1358,14 +1427,22 @@
 			onsubmit={save}
 			class={[
 				'max-h-[94dvh] w-full overflow-y-auto rounded-t-xl bg-[var(--color-surface)] shadow-xl md:rounded-xl',
-				editing ? 'md:max-w-2xl' : 'md:max-w-6xl'
+				relatedTabletId
+					? 'md:flex md:h-[94dvh] md:max-w-[calc(100vw-2rem)] md:flex-col md:overflow-hidden'
+					: editing
+						? 'md:max-w-2xl'
+						: 'md:max-w-6xl'
 			]}
 		>
 			<header
 				class="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4"
 			>
 				<h2 class="text-lg font-semibold">
-					{editing ? 'Sửa Hương linh' : 'Thêm nhiều Hương linh'}
+					{editing
+						? 'Sửa Hương linh'
+						: relatedTabletId
+							? 'Thêm Hương linh vào bài vị'
+							: 'Thêm nhiều Hương linh'}
 				</h2>
 				<button
 					type="button"
@@ -1374,19 +1451,39 @@
 					class="icon-[lucide--x] h-5 w-5 cursor-pointer"
 				></button>
 			</header>
-			<div class="grid gap-4 p-5 md:grid-cols-2">
-				{#if editing}<div class="md:col-span-2">
-						<SpiritImageUploader
-							imageUrl={form.image_url}
-							displayName={form.full_name || editing.full_name}
-							uploading={imageUploading}
-							onselect={selectSpiritImage}
-						/>
-					</div>{/if}
+			<div
+				class={[
+					'grid gap-4 p-5',
+					relatedTabletId
+						? 'md:min-h-0 md:flex-1 md:grid-cols-[minmax(18rem,0.8fr)_minmax(0,1.2fr)] md:overflow-hidden'
+						: 'md:grid-cols-2'
+				]}
+			>
+				{#if relatedTabletId}<section class="flex min-h-0 min-w-0 flex-col md:h-full">
+						{#if editing}<div class="shrink-0 overflow-visible pb-4">
+							<SpiritImageUploader
+								imageUrl={form.image_url}
+								displayName={form.full_name || editing.full_name}
+								uploading={imageUploading}
+								onselect={selectSpiritImage}
+							/>
+						</div>{/if}
+						<div class="flex min-h-0 flex-1 flex-col overflow-hidden rounded-md border border-[var(--color-border)]">
+						<header class="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2">
+							<div class="min-w-0"><h3 class="truncate text-sm font-semibold">Hương linh cùng bài vị: {relatedTabletName}</h3><p class="text-xs text-[var(--color-text-secondary)]">Chọn một dòng để sửa Hương linh đó.</p></div>
+							{#if canWrite}<button type="button" onclick={addRelatedSpirit} class="h-9 shrink-0 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]">+ Thêm Hương linh</button>{/if}
+						</header>
+						<div class="min-h-0 flex-1 overflow-auto">
+							{#if relatedSpiritsLoading}<div class="py-6"><LoadingIndicator label="Đang tải Hương linh cùng bài vị..." /></div>{:else}<table class="w-full min-w-[560px] text-left text-sm"><thead class="sticky top-0 bg-[var(--color-surface)] text-xs text-[var(--color-text-secondary)]"><tr><th class="px-3 py-2">Họ tên</th><th class="px-3 py-2">Pháp danh</th><th class="px-3 py-2">Năm sinh</th><th class="px-3 py-2">Năm mất</th></tr></thead><tbody class="divide-y divide-[var(--color-border)]">{#each relatedSpirits as related (related.id)}<tr class={['transition-colors', related.id === editing?.id ? 'bg-[var(--color-primary-soft)]' : canWrite ? 'cursor-pointer hover:bg-[var(--color-surface-muted)]' : '']} onclick={() => selectRelatedSpirit(related)}><td class="px-3 py-2 font-medium">{related.full_name}</td><td class="px-3 py-2">{related.dharma_name || '—'}</td><td class="px-3 py-2">{related.birth_year || '—'}</td><td class="px-3 py-2">{related.death_year || '—'}</td></tr>{/each}</tbody></table>{/if}
+						</div>
+						</div>
+					</section>{/if}
+				<div class={relatedTabletId ? 'min-w-0 md:min-h-0 md:overflow-y-auto md:pr-1' : 'contents'}>
+				<div class={relatedTabletId ? 'grid content-start gap-4 md:grid-cols-2' : 'contents'}>
 				{#if houses.length > 1}<label
 						><span class="mb-1 block text-sm font-medium">Nhà Linh *</span><select
 							bind:value={formHouseId}
-							disabled={Boolean(editing)}
+							disabled={Boolean(editing) || Boolean(relatedTabletId)}
 							onchange={() => void changeFormHouse()}
 							required
 							class="h-11 w-full rounded-md border-[var(--color-border-strong)] disabled:opacity-60"
@@ -1403,6 +1500,7 @@
 									bind:value={formPositionQuery}
 									oninput={searchFormPosition}
 									placeholder="Tìm trực tiếp, ví dụ 1a1..."
+									disabled={Boolean(relatedTabletId && !editing)}
 									autocomplete="off"
 									role="combobox"
 									aria-autocomplete="list"
@@ -1413,7 +1511,7 @@
 										class="pointer-events-none absolute top-3.5 right-3 icon-[lucide--loader-circle] h-4 w-4 animate-spin text-[var(--color-text-muted)]"
 									></span>{/if}
 							</div>
-							{#if selectedFormPosition}<button
+							{#if selectedFormPosition && !(relatedTabletId && !editing)}<button
 									type="button"
 									onclick={clearFormPosition}
 									class="h-11 rounded-md border border-[var(--color-border-strong)] px-3 text-xs font-semibold"
@@ -1445,7 +1543,7 @@
 						><span class="mb-1 block text-sm font-medium">Bài vị hiện có</span><select
 							bind:value={form.tablet_id}
 							onchange={() => (quickCreateTablet = false)}
-							disabled={tabletLoading}
+							disabled={tabletLoading || Boolean(relatedTabletId && !editing)}
 							class="h-11 w-full rounded-md border-[var(--color-border-strong)] disabled:opacity-60"
 							><option value=""
 								>{tabletLoading
@@ -1481,6 +1579,8 @@
 							onbusychange={(busy) => (inlineEditorBusy = busy)}
 						/>
 					</div>{/if}
+				</div>
+				</div>
 			</div>
 			<footer
 				class="sticky bottom-0 z-40 flex justify-end gap-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4"
@@ -1490,7 +1590,7 @@
 					onclick={() => (formOpen = false)}
 					class="h-11 cursor-pointer rounded-md border border-[var(--color-border-strong)] px-5 text-sm font-semibold"
 					>Huỷ</button
-				>{#if !editing && selectedFormPosition && form.tablet_id}<button
+				>{#if !editing && !relatedTabletId && selectedFormPosition && form.tablet_id}<button
 						type="submit"
 						disabled={saving || imageUploading || inlineEditorBusy}
 						onclick={() => (quickCreateTablet = true)}
@@ -1511,7 +1611,11 @@
 					class="h-11 cursor-pointer rounded-md bg-[var(--color-primary)] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
 					>{saving
 						? 'Đang lưu...'
-						: !editing && selectedFormPosition && !form.tablet_id
+						: editing
+							? 'Lưu'
+							: relatedTabletId
+							? 'Thêm Hương linh'
+							: !editing && selectedFormPosition && !form.tablet_id
 							? 'Tạo bài vị & thêm'
 							: !editing && !selectedFormPosition
 								? 'Lưu chưa xếp vị trí'

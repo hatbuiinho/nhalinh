@@ -32,6 +32,7 @@ export type Position = {
 	notes: string;
 	tablet_count: number;
 	spirit_count: number;
+	spirit_names: string[];
 };
 export type OccupancySummary = {
 	area_count: number;

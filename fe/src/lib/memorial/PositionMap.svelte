@@ -1,17 +1,20 @@
 <script lang="ts">
 	import { tick } from 'svelte';
+	import { tooltip } from '$lib/actions/tooltip';
 	import type { Position } from './api';
 
 	let {
 		positions,
 		areaCode,
 		fullscreen = false,
-		onposition
+		onposition,
+		onemptyposition
 	}: {
 		positions: Position[];
 		areaCode: string;
 		fullscreen?: boolean;
 		onposition: (position: Position) => void;
+		onemptyposition?: (coordinate: { rowNumber: number; columnNumber: number }) => void;
 	} = $props();
 
 	type HeatLevel = 'empty' | 'low' | 'medium' | 'high' | 'very-high';
@@ -21,8 +24,7 @@
 	const maxZoom = 1.0;
 	const zoomStep = 0.05;
 	const baseLabelWidth = 56;
-	const baseCellWidth = 132;
-	const baseCellHeight = 96;
+	const baseCellWidth = 200;
 
 	let heatFilter = $state<HeatFilter>('all');
 	let zoom = $state(0.5);
@@ -48,17 +50,21 @@
 	);
 	let labelWidth = $derived(Math.max(42, Math.round(baseLabelWidth * zoom)));
 	let cellWidth = $derived(Math.round(baseCellWidth * zoom));
-	let cellHeight = $derived(Math.round(baseCellHeight * zoom));
+	let cellHeight = $derived(Math.round((cellWidth * 3) / 4));
 	let gridGap = $derived(Math.max(2, Math.round(8 * zoom)));
 	let headerHeight = $derived(Math.max(28, Math.round(40 * zoom)));
 	let cellPadding = $derived(Math.max(6, Math.round(12 * zoom)));
 	let cellRadius = $derived(Math.max(8, Math.round(12 * zoom)));
 	let axisPadding = $derived(Math.max(8, Math.round(8 * zoom)));
-	let titleFontSize = $derived(Math.max(10, Math.round(14 * zoom)));
-	let metricFontSize = $derived(Math.max(9, Math.round(12 * zoom)));
+	let titleFontSize = $derived(Math.max(9, Math.round(14 * zoom)));
+	let metricFontSize = $derived(Math.max(8, Math.round(12 * zoom)));
+	let spiritNameFontSize = $derived(Math.max(7, Math.round(11 * zoom)));
 	let headerFontSize = $derived(Math.max(10, Math.round(12 * zoom)));
 	let titleGap = $derived(Math.max(4, Math.round(8 * zoom)));
 	let metricGap = $derived(Math.max(2, Math.round(4 * zoom)));
+	let showPositionLabel = $derived(zoom >= 0.3);
+	let showSummary = $derived(zoom >= 0.45);
+	let showSpiritNames = $derived(zoom >= 0.5);
 	let zoomPercent = $derived(`${Math.round(zoom * 100)}%`);
 	let dragCursor = $derived(panning ? 'cursor-grabbing' : 'cursor-grab');
 
@@ -312,16 +318,16 @@
 		>
 			<div
 				class="grid min-w-max"
-				style={`grid-template-columns: ${labelWidth}px repeat(${maxColumn}, minmax(${cellWidth}px, 1fr)); gap: ${gridGap}px;`}
+				style={`grid-template-columns: ${labelWidth}px repeat(${maxColumn}, ${cellWidth}px); grid-template-rows: ${headerHeight}px repeat(${maxRow}, ${cellHeight}px); gap: ${gridGap}px;`}
 			>
 				<div
 					class="sticky top-0 left-0 z-30 bg-[var(--color-surface)] shadow-[1px_1px_0_var(--color-border)]"
-					style={`min-height: ${headerHeight}px;`}
+					style={`height: ${headerHeight}px;`}
 				></div>
 				{#each columns as column (column)}
 					<div
 						class="sticky top-0 z-20 bg-[var(--color-surface)] text-center font-semibold text-[var(--color-text-secondary)] shadow-[0_1px_0_var(--color-border)]"
-						style={`min-height: ${headerHeight}px; padding: ${axisPadding}px; font-size: ${headerFontSize}px; line-height: 1;`}
+						style={`height: ${headerHeight}px; padding: ${axisPadding}px; font-size: ${headerFontSize}px; line-height: 1;`}
 						aria-label={`Cột ${column}`}
 						title={`Cột ${column}`}
 					>
@@ -331,7 +337,7 @@
 				{#each rows as row (row)}
 					<div
 						class="sticky left-0 z-10 grid place-items-center bg-[var(--color-surface)] font-semibold text-[var(--color-text-secondary)] shadow-[1px_0_0_var(--color-border)]"
-						style={`min-height: ${cellHeight}px; padding: ${axisPadding}px; font-size: ${headerFontSize}px; line-height: 1;`}
+						style={`height: ${cellHeight}px; padding: ${axisPadding}px; font-size: ${headerFontSize}px; line-height: 1;`}
 						aria-label={`Hàng ${row}`}
 						title={`Hàng ${row}`}
 					>
@@ -340,36 +346,66 @@
 					{#each columns as column (`${row}:${column}`)}
 						{@const position = positionByCoordinate.get(`${row}:${column}`)}
 						{#if position}
+							{@const spiritNames = position.spirit_names ?? []}
+							{@const visibleSpiritNames = spiritNames.slice(0, 3)}
 							<button
 								type="button"
+								use:tooltip={spiritNames.join('\n')}
 								onclick={() => onposition(position)}
 								disabled={!matches(position)}
 								class={[
-									'text-left transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-md disabled:cursor-default disabled:opacity-15',
+									'flex w-full min-w-0 flex-col overflow-hidden text-left transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-md disabled:cursor-default disabled:opacity-15',
 									heatTone(position)
 								]}
-								style={`min-height: ${cellHeight}px; padding: ${cellPadding}px; border-radius: ${cellRadius}px;`}
+								style={`height: ${cellHeight}px; padding: ${cellPadding}px; border-radius: ${cellRadius}px;`}
 							>
-								<strong class="block leading-tight" style={`font-size: ${titleFontSize}px;`}>
-									{position.name}
-								</strong>
-								{#if position.tablet_count > 1}<span
-									class="block leading-tight font-semibold"
-									style={`margin-top: ${titleGap}px; font-size: ${metricFontSize}px;`}
-								>
-									{position.tablet_count} BV
-								</span>{/if}
-								<span
-									class="block leading-tight opacity-75"
-									style={`margin-top: ${position.tablet_count > 1 ? metricGap : titleGap}px; font-size: ${metricFontSize}px;`}
-								>
-									{position.spirit_count} HL
-								</span>
+								{#if showPositionLabel}
+									<strong class="block truncate leading-tight" style={`font-size: ${titleFontSize}px;`}>
+										{position.name}
+									</strong>
+								{/if}
+								{#if showSummary && !(showSpiritNames && visibleSpiritNames.length > 0)}
+									<span
+										class="block leading-tight opacity-80"
+										style={`margin-top: ${showPositionLabel ? titleGap : 0}px; font-size: ${metricFontSize}px;`}
+									>
+										{position.spirit_count} HL
+									</span>
+								{/if}
+								{#if showSpiritNames && visibleSpiritNames.length > 0}
+									<div
+										class="min-h-0 flex-1 overflow-hidden leading-snug opacity-90"
+										style={`margin-top: ${metricGap}px; font-size: ${spiritNameFontSize}px;`}
+									>
+										{#each visibleSpiritNames as spiritName, index (index)}
+											<span class="block truncate">{spiritName}</span>
+										{/each}
+									</div>
+								{/if}
+								{#if showSpiritNames && position.spirit_count > visibleSpiritNames.length}
+									<div
+										class="mt-auto leading-tight font-semibold opacity-80"
+										style={`padding-top: ${metricGap}px; font-size: ${metricFontSize}px;`}
+									>
+										+{position.spirit_count - visibleSpiritNames.length} HL
+									</div>
+								{/if}
+							</button>
+						{:else if onemptyposition}
+							<button
+								type="button"
+								onclick={() => onemptyposition({ rowNumber: row, columnNumber: column })}
+								class="grid w-full place-items-center rounded-[inherit] bg-[color-mix(in_srgb,var(--color-surface)_94%,var(--color-primary)_6%)] text-center font-semibold text-[var(--color-primary-dark)] transition hover:bg-[var(--color-primary-soft)]"
+								style={`height: ${cellHeight}px; font-size: ${metricFontSize}px;`}
+								aria-label={`Tạo bài vị tại vị trí ${column}${areaCode}-${row}`}
+								title={`Tạo bài vị tại ${column}${areaCode}-${row}`}
+							>
+								{#if zoom >= 0.5}<span>+ Tạo bài vị</span>{/if}
 							</button>
 						{:else}
 							<div
 								class="bg-[color-mix(in_srgb,var(--color-surface)_94%,var(--color-primary)_6%)]"
-								style={`min-height: ${cellHeight}px; border-radius: ${cellRadius}px;`}
+								style={`height: ${cellHeight}px; border-radius: ${cellRadius}px;`}
 							></div>
 						{/if}
 					{/each}

@@ -52,6 +52,7 @@ type Position struct {
 	Notes        string    `json:"notes"`
 	TabletCount  int       `json:"tablet_count"`
 	SpiritCount  int       `json:"spirit_count"`
+	SpiritNames  []string  `json:"spirit_names"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }

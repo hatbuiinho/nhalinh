@@ -108,7 +108,7 @@ func (s *PostgresStore) AreaCode(ctx context.Context, id string) (string, error)
 	return code, mapErr(e)
 }
 func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string) ([]Position, error) {
-	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
+	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),COALESCE((SELECT array_agg(s2.full_name ORDER BY s2.full_name,s2.id) FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id),ARRAY[]::text[]),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
 	if e != nil {
 		return nil, e
 	}
@@ -116,7 +116,7 @@ func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string)
 	out := []Position{}
 	for rows.Next() {
 		var v Position
-		if e = rows.Scan(&v.ID, &v.AreaID, &v.HouseID, &v.HouseName, &v.AreaCode, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.TabletCount, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.AreaID, &v.HouseID, &v.HouseName, &v.AreaCode, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.TabletCount, &v.SpiritCount, &v.SpiritNames, &v.CreatedAt, &v.UpdatedAt); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
