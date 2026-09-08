@@ -3,3 +3,4 @@ secrets/
 firebase-service-account.json
 storage/ota/**/*.zip
 storage/ota/**/latest.json
+.air.toml

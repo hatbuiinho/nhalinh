@@ -234,17 +234,8 @@
 		});
 		return items;
 	});
-	let tableRowNumbers = $derived.by(() => {
-		const numbers = new Map<string, number>();
-		let index = 1;
-		for (const group of tableSpiritGroups) {
-			for (const item of group.items) numbers.set(item.id, index++);
-		}
-		return numbers;
-	});
 	let tableWidth = $derived(
 		(canWrite ? 40 : 0) +
-			56 +
 			(canWrite ? 128 : 0) +
 			tableSpiritColumns.reduce((total, column) => total + columnWidth(column), 0)
 	);
@@ -1695,14 +1686,12 @@
 		>
 			<colgroup>
 				{#if canWrite}<col style="width: 40px;" />{/if}
-				<col style="width: 56px;" />
 				{#each tableSpiritColumns as column (column.key)}<col style={`width: ${columnWidth(column)}px;`} />{/each}
 				{#if canWrite}<col style="width: 128px;" />{/if}
 			</colgroup>
 			<thead class="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]">
 				<tr>
 					{#if canWrite}<th class="sticky top-0 z-10 w-10 bg-[var(--color-surface-muted)] px-3 py-3"><input type="checkbox" checked={spirits.length > 0 && spirits.every((item) => selectedSpiritIDs.has(item.id))} onchange={toggleVisibleSelection} aria-label="Chọn tất cả Hương linh đang hiển thị" class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" /></th>{/if}
-					<th class="sticky top-0 z-10 w-14 bg-[var(--color-surface-muted)] px-3 py-3 text-right font-semibold">STT</th>
 					{#each tableSpiritColumns as column (column.key)}<th
 							class="relative sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-3"
 						>
@@ -1725,7 +1714,6 @@
 				{#each tableSpiritGroups as group (group.key)}
 					{#each group.items as item, itemIndex (item.id)}<tr ondblclick={(event) => openSpiritEditorFromRow(event, item)} class={['hover:bg-[var(--color-primary-soft)]/40', canWrite && 'cursor-default']}>
 						{#if canWrite}<td class="px-3 py-2 align-middle"><input type="checkbox" checked={selectedSpiritIDs.has(item.id)} onchange={() => toggleSpiritSelection(item.id)} aria-label={`Chọn ${item.full_name}`} class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]" /></td>{/if}
-						<td class="px-3 py-2 text-right align-middle tabular-nums text-[var(--color-text-secondary)]">{tableRowNumbers.get(item.id)}</td>
 						{#each tableSpiritColumns as column (column.key)}
 							{#if group.hasPosition && (column.key === 'position_name' || column.key === 'tablet_name' || column.key === 'house_name')}
 								{#if itemIndex === 0}<td rowspan={group.items.length} class="bg-[var(--color-surface-muted)]/35 px-3 py-2 align-middle font-medium">
