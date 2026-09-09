@@ -511,17 +511,66 @@ func (s *MemoryStore) ListSpirits(_ context.Context, a Actor, o SearchOptions) (
 		}
 		out = append(out, v)
 	}
-	sort.Slice(out, func(i, j int) bool {
-		leftRank, rightRank := spiritNameSearchRank(out[i].FullName, q), spiritNameSearchRank(out[j].FullName, q)
-		if leftRank != rightRank {
-			return leftRank < rightRank
-		}
-		return out[i].FullName < out[j].FullName
-	})
+	if o.GroupByTablet {
+		sort.Slice(out, func(i, j int) bool {
+			left, right := out[i], out[j]
+			if left.HouseName != right.HouseName {
+				return left.HouseName < right.HouseName
+			}
+			if left.AreaCode != right.AreaCode {
+				return left.AreaCode < right.AreaCode
+			}
+			if left.PositionName != right.PositionName {
+				return left.PositionName < right.PositionName
+			}
+			if left.TabletName != right.TabletName {
+				return left.TabletName < right.TabletName
+			}
+			if spiritTabletGroupKey(left) != spiritTabletGroupKey(right) {
+				return spiritTabletGroupKey(left) < spiritTabletGroupKey(right)
+			}
+			if left.FullName != right.FullName {
+				return left.FullName < right.FullName
+			}
+			return left.ID < right.ID
+		})
+	} else {
+		sort.Slice(out, func(i, j int) bool {
+			leftRank, rightRank := spiritNameSearchRank(out[i].FullName, q), spiritNameSearchRank(out[j].FullName, q)
+			if leftRank != rightRank {
+				return leftRank < rightRank
+			}
+			return out[i].FullName < out[j].FullName
+		})
+	}
 	total := len(out)
+	if o.GroupByTablet {
+		groups := make([][]Spirit, 0)
+		for _, spirit := range out {
+			if len(groups) == 0 || spiritTabletGroupKey(groups[len(groups)-1][0]) != spiritTabletGroupKey(spirit) {
+				groups = append(groups, []Spirit{spirit})
+			} else {
+				groups[len(groups)-1] = append(groups[len(groups)-1], spirit)
+			}
+		}
+		start := min(o.Offset, len(groups))
+		end := min(start+o.Limit, len(groups))
+		page := []Spirit{}
+		for _, group := range groups[start:end] {
+			page = append(page, group...)
+		}
+		return page, total, nil
+	}
 	start := min(o.Offset, total)
 	end := min(start+o.Limit, total)
 	return out[start:end], total, nil
+}
+
+func spiritTabletGroupKey(v Spirit) string {
+	if v.TabletID != "" {
+		return "tablet:" + v.TabletID
+	}
+	return "unplaced:" + v.ID
 }
 func (s *MemoryStore) GetSpirit(_ context.Context, a Actor, id string) (Spirit, error) {
 	s.mu.RLock()
@@ -715,6 +764,7 @@ func (s *MemoryStore) join(v Spirit) Spirit {
 	if t.PositionID == "" {
 		h := s.houses[t.HouseID]
 		v.TabletName = t.Name
+		v.TabletImageURL = t.ImageURL
 		v.HouseID = t.HouseID
 		v.HouseName = h.Name
 		return v
@@ -723,6 +773,7 @@ func (s *MemoryStore) join(v Spirit) Spirit {
 	a := s.areas[p.AreaID]
 	h := s.houses[a.HouseID]
 	v.TabletName = t.Name
+	v.TabletImageURL = t.ImageURL
 	v.PositionID = p.ID
 	v.PositionName = p.Name
 	v.AreaID = a.ID

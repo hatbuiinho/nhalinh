@@ -29,6 +29,8 @@ export type Position = {
 	row_number: number;
 	column_number: number;
 	name: string;
+	image_url: string;
+	sender: string;
 	notes: string;
 	tablet_count: number;
 	spirit_count: number;
@@ -69,6 +71,8 @@ export type Tablet = {
 	row_number: number;
 	column_number: number;
 	name: string;
+	image_url: string;
+	sender: string;
 	notes: string;
 	spirit_count: number;
 };
@@ -82,6 +86,7 @@ export type Spirit = {
 	position_id: string;
 	position_name: string;
 	tablet_name: string;
+	tablet_image_url: string;
 	full_name: string;
 	dharma_name: string;
 	birth_year: string;
@@ -217,6 +222,8 @@ export const listUnplacedTablets = async (houseId: string, query = '') => {
 export const createTablet = (input: {
 	position_id: string;
 	name: string;
+	image_url: string;
+	sender: string;
 	notes: string;
 	spirits: InlineSpiritInput[];
 	existing_spirit_ids?: string[];
@@ -226,6 +233,8 @@ export const updateTablet = (
 	input: {
 		position_id: string;
 		name: string;
+		image_url: string;
+		sender: string;
 		notes: string;
 		spirits: EditableSpiritInput[];
 	}
@@ -254,17 +263,18 @@ export async function listSpirits(
 	query: string,
 	houseId: string,
 	areaId: string,
-	limit = 100,
+	limit = 25,
 	offset = 0
 ) {
 	const p = new URLSearchParams({
 		q: query,
 		house_id: houseId,
 		area_id: areaId,
+		group_by_tablet: 'true',
 		limit: String(limit),
 		offset: String(offset)
 	});
-	return apiRequest<{ spirits: Spirit[]; total: number; has_more: boolean }>(`/api/spirits?${p}`);
+	return apiRequest<{ spirits: Spirit[]; total: number; has_more: boolean; next_offset: number }>(`/api/spirits?${p}`);
 }
 export async function searchUnplacedSpirits(houseId: string, query: string, limit = 20) {
 	const params = new URLSearchParams({

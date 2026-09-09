@@ -38,6 +38,8 @@ type positionsBatchPayload struct {
 type tabletPayload struct {
 	PositionID        string          `json:"position_id"`
 	Name              string          `json:"name"`
+	ImageURL          string          `json:"image_url"`
+	Sender            string          `json:"sender"`
 	Notes             string          `json:"notes"`
 	Spirits           []spiritPayload `json:"spirits"`
 	ExistingSpiritIDs []string        `json:"existing_spirit_ids"`
@@ -231,7 +233,7 @@ func (h *MemorialHandler) Tablets(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Notes: p.Notes, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
+		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
 		h.write(w, v, e, 201)
 	default:
 		methodNotAllowed(w)
@@ -260,7 +262,7 @@ func (h *MemorialHandler) Tablet(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Notes: p.Notes, Spirits: spirits})
+		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Spirits: spirits})
 		h.write(w, v, e, 200)
 	case http.MethodDelete:
 		e := h.service.DeleteTablet(r.Context(), actor(r), id, r.URL.Query().Get("delete_spirits") == "true")
@@ -276,8 +278,22 @@ func (h *MemorialHandler) Spirits(w http.ResponseWriter, r *http.Request) {
 		if !ok {
 			return
 		}
-		v, total, e := h.service.ListSpirits(r.Context(), actor(r), memorial.SearchOptions{Query: r.URL.Query().Get("q"), HouseID: r.URL.Query().Get("house_id"), AreaID: r.URL.Query().Get("area_id"), PositionID: r.URL.Query().Get("position_id"), TabletID: r.URL.Query().Get("tablet_id"), Limit: limit, Offset: offset, Unplaced: r.URL.Query().Get("unplaced") == "true", PlacementStatus: r.URL.Query().Get("placement_status"), UrnStatus: r.URL.Query().Get("urn_status")})
-		h.write(w, map[string]any{"spirits": v, "total": total, "has_more": offset+len(v) < total}, e, 200)
+		v, total, e := h.service.ListSpirits(r.Context(), actor(r), memorial.SearchOptions{Query: r.URL.Query().Get("q"), HouseID: r.URL.Query().Get("house_id"), AreaID: r.URL.Query().Get("area_id"), PositionID: r.URL.Query().Get("position_id"), TabletID: r.URL.Query().Get("tablet_id"), Limit: limit, Offset: offset, Unplaced: r.URL.Query().Get("unplaced") == "true", GroupByTablet: r.URL.Query().Get("group_by_tablet") == "true", PlacementStatus: r.URL.Query().Get("placement_status"), UrnStatus: r.URL.Query().Get("urn_status")})
+		nextOffset := offset + len(v)
+		hasMore := nextOffset < total
+		if r.URL.Query().Get("group_by_tablet") == "true" {
+			groups := make(map[string]struct{})
+			for _, spirit := range v {
+				key := spirit.TabletID
+				if key == "" {
+					key = "unplaced:" + spirit.ID
+				}
+				groups[key] = struct{}{}
+			}
+			nextOffset = offset + len(groups)
+			hasMore = len(groups) == limit
+		}
+		h.write(w, map[string]any{"spirits": v, "total": total, "has_more": hasMore, "next_offset": nextOffset}, e, 200)
 	case http.MethodPost:
 		var p spiritPayload
 		if !decode(w, r, &p) {

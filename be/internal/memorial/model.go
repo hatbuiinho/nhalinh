@@ -91,35 +91,38 @@ type Tablet struct {
 	RowNumber    int       `json:"row_number"`
 	ColumnNumber int       `json:"column_number"`
 	Name         string    `json:"name"`
+	ImageURL     string    `json:"image_url"`
+	Sender       string    `json:"sender"`
 	Notes        string    `json:"notes"`
 	SpiritCount  int       `json:"spirit_count"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
 type Spirit struct {
-	ID           string     `json:"id"`
-	TabletID     string     `json:"tablet_id"`
-	HouseID      string     `json:"house_id"`
-	HouseName    string     `json:"house_name"`
-	AreaID       string     `json:"area_id"`
-	AreaCode     string     `json:"area_code"`
-	PositionID   string     `json:"position_id"`
-	PositionName string     `json:"position_name"`
-	TabletName   string     `json:"tablet_name"`
-	FullName     string     `json:"full_name"`
-	DharmaName   string     `json:"dharma_name"`
-	BirthYear    string     `json:"birth_year"`
-	DeathYear    string     `json:"death_year"`
-	Age          string     `json:"age"`
-	ImageURL     string     `json:"image_url"`
-	BurialPlace  string     `json:"burial_place"`
-	Sender       string     `json:"sender"`
-	SentMonth    string     `json:"sent_month"`
-	Notes        string     `json:"notes"`
-	HasUrn       bool       `json:"has_urn"`
-	CreatedAt    time.Time  `json:"created_at"`
-	UpdatedAt    time.Time  `json:"updated_at"`
-	DeletedAt    *time.Time `json:"-"`
+	ID             string     `json:"id"`
+	TabletID       string     `json:"tablet_id"`
+	HouseID        string     `json:"house_id"`
+	HouseName      string     `json:"house_name"`
+	AreaID         string     `json:"area_id"`
+	AreaCode       string     `json:"area_code"`
+	PositionID     string     `json:"position_id"`
+	PositionName   string     `json:"position_name"`
+	TabletName     string     `json:"tablet_name"`
+	TabletImageURL string     `json:"tablet_image_url"`
+	FullName       string     `json:"full_name"`
+	DharmaName     string     `json:"dharma_name"`
+	BirthYear      string     `json:"birth_year"`
+	DeathYear      string     `json:"death_year"`
+	Age            string     `json:"age"`
+	ImageURL       string     `json:"image_url"`
+	BurialPlace    string     `json:"burial_place"`
+	Sender         string     `json:"sender"`
+	SentMonth      string     `json:"sent_month"`
+	Notes          string     `json:"notes"`
+	HasUrn         bool       `json:"has_urn"`
+	CreatedAt      time.Time  `json:"created_at"`
+	UpdatedAt      time.Time  `json:"updated_at"`
+	DeletedAt      *time.Time `json:"-"`
 }
 type HouseInput struct {
 	Name, Address, Notes string
@@ -132,9 +135,9 @@ type PositionInput struct {
 	Notes                   string
 }
 type TabletInput struct {
-	PositionID, Name, Notes string
-	Spirits                 []SpiritInput
-	ExistingSpiritIDs       []string
+	PositionID, Name, ImageURL, Sender, Notes string
+	Spirits                                   []SpiritInput
+	ExistingSpiritIDs                         []string
 }
 type SpiritInput struct {
 	ID, HouseID, TabletID, FullName, DharmaName, BirthYear, DeathYear, Age, ImageURL, BurialPlace, Sender, SentMonth, Notes string
@@ -144,6 +147,7 @@ type SearchOptions struct {
 	Query, HouseID, AreaID, PositionID, TabletID string
 	Limit, Offset                                int
 	Unplaced                                     bool
+	GroupByTablet                                bool
 	PlacementStatus, UrnStatus                   string
 }
 type PositionSearchOptions struct {

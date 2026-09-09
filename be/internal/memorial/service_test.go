@@ -142,6 +142,54 @@ func TestSpiritSearchPrioritizesFullName(t *testing.T) {
 	}
 }
 
+func TestGroupedSpiritPaginationKeepsTabletTogether(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh nhóm"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	area, err := service.CreateArea(ctx, admin, AreaInput{HouseID: house.ID, Code: "A"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPosition, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 1, ColumnNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondPosition, err := service.CreatePosition(ctx, admin, PositionInput{AreaID: area.ID, RowNumber: 2, ColumnNumber: 1})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstTablet, err := service.CreateTablet(ctx, admin, TabletInput{PositionID: firstPosition.ID, Name: "Bài vị một", Spirits: []SpiritInput{{FullName: "An"}, {FullName: "Bình"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	secondTablet, err := service.CreateTablet(ctx, admin, TabletInput{PositionID: secondPosition.ID, Name: "Bài vị hai", Spirits: []SpiritInput{{FullName: "Cường"}, {FullName: "Dung"}}})
+	if err != nil {
+		t.Fatal(err)
+	}
+	firstPage, total, err := service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, GroupByTablet: true, Limit: 1})
+	if err != nil || total != 4 || len(firstPage) != 2 {
+		t.Fatalf("first page must include its complete tablet: total=%d items=%#v err=%v", total, firstPage, err)
+	}
+	for _, item := range firstPage {
+		if item.TabletID != firstTablet.ID {
+			t.Fatalf("first page contains a split tablet: %#v", firstPage)
+		}
+	}
+	secondPage, _, err := service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, GroupByTablet: true, Limit: 1, Offset: 1})
+	if err != nil || len(secondPage) != 2 {
+		t.Fatalf("second page must include its complete tablet: items=%#v err=%v", secondPage, err)
+	}
+	for _, item := range secondPage {
+		if item.TabletID != secondTablet.ID {
+			t.Fatalf("second page contains a split tablet: %#v", secondPage)
+		}
+	}
+}
+
 func TestCreatePositionsSkipsExistingCoordinates(t *testing.T) {
 	ctx := context.Background()
 	service := NewService(NewMemoryStore(), func() time.Time { return time.Date(2026, 8, 19, 0, 0, 0, 0, time.UTC) })

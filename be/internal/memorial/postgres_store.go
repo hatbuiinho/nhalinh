@@ -235,7 +235,7 @@ func (s *PostgresStore) ListOccupancyPositions(ctx context.Context, _ Actor, hou
 	return positions, unplaced, nil
 }
 func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position string) ([]Tablet, error) {
-	rows, e := s.pool.Query(ctx, `SELECT t.id,t.position_id,h.id,h.name,a.id,a.code,p.name,p.row_number,p.column_number,t.name,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.position_id=$1 GROUP BY t.id,p.id,a.id,h.id ORDER BY t.name`, position)
+	rows, e := s.pool.Query(ctx, `SELECT t.id,t.position_id,h.id,h.name,a.id,a.code,p.name,p.row_number,p.column_number,t.name,t.image_url,t.sender,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.position_id=$1 GROUP BY t.id,p.id,a.id,h.id ORDER BY t.name`, position)
 	if e != nil {
 		return nil, e
 	}
@@ -243,7 +243,7 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if e = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
@@ -251,7 +251,7 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 	return out, rows.Err()
 }
 func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseID, query string) ([]Tablet, error) {
-	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.name)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.name`, houseID, query)
+	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.image_url,t.sender,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.name)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.name`, houseID, query)
 	if err != nil {
 		return nil, err
 	}
@@ -259,7 +259,7 @@ func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseI
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -541,7 +541,7 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 	return result, nil
 }
 func (s *PostgresStore) CreateTablet(ctx context.Context, v Tablet) (Tablet, error) {
-	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7) RETURNING id,house_id,position_id,name,notes,created_at,updated_at`, v.ID, v.HouseID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
+	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,image_url,sender,notes,created_at,updated_at) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9) RETURNING id,house_id,position_id,name,image_url,sender,notes,created_at,updated_at`, v.ID, v.HouseID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
 func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Tablet, error) {
@@ -609,7 +609,7 @@ func (s *PostgresStore) UpdateTabletWithSpirits(ctx context.Context, v Tablet, s
 		return Tablet{}, fmt.Errorf("begin update tablet: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = tx.QueryRow(ctx, `UPDATE memorial_tablets SET position_id=$2,name=$3,notes=$4,updated_at=$5 WHERE id=$1 RETURNING id,position_id,name,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.Notes, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `UPDATE memorial_tablets SET position_id=$2,name=$3,image_url=$4,sender=$5,notes=$6,updated_at=$7 WHERE id=$1 RETURNING id,position_id,name,image_url,sender,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
 	kept := make([]string, 0, len(spirits))
@@ -673,7 +673,7 @@ func (s *PostgresStore) DeleteTablet(ctx context.Context, id string, deleteSpiri
 	return tx.Commit(ctx)
 }
 
-const spiritCols = `s.id,COALESCE(s.tablet_id,''),h.id,h.name,COALESCE(a.id,''),COALESCE(a.code,''),COALESCE(p.id,''),COALESCE(p.name,''),COALESCE(t.name,''),s.full_name,s.dharma_name,s.birth_year,s.death_year,s.age,s.image_url,s.burial_place,s.sender,s.sent_month,s.notes,s.has_urn,s.created_at,s.updated_at`
+const spiritCols = `s.id,COALESCE(s.tablet_id,''),h.id,h.name,COALESCE(a.id,''),COALESCE(a.code,''),COALESCE(p.id,''),COALESCE(p.name,''),COALESCE(t.name,''),COALESCE(t.image_url,''),s.full_name,s.dharma_name,s.birth_year,s.death_year,s.age,s.image_url,s.burial_place,s.sender,s.sent_month,s.notes,s.has_urn,s.created_at,s.updated_at`
 
 func (s *PostgresStore) ListSpirits(ctx context.Context, a Actor, o SearchOptions) ([]Spirit, int, error) {
 	access := "($1='admin' OR $3 OR EXISTS(SELECT 1 FROM spirit_house_members hm WHERE hm.house_id=h.id AND hm.user_id=$2))"
@@ -683,13 +683,33 @@ func (s *PostgresStore) ListSpirits(ctx context.Context, a Actor, o SearchOption
 	if e := s.pool.QueryRow(ctx, `SELECT COUNT(*) FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter, args...).Scan(&total); e != nil {
 		return nil, 0, e
 	}
-	rows, e := s.pool.Query(ctx, `SELECT `+spiritCols+` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE `+filter+` ORDER BY CASE
-		WHEN $8='' THEN 0
-		WHEN unaccent(lower(s.full_name))=unaccent(lower($8)) THEN 0
-		WHEN unaccent(lower(s.full_name)) LIKE unaccent(lower($8))||'%' THEN 1
-		WHEN unaccent(lower(s.full_name)) LIKE '%'||unaccent(lower($8))||'%' THEN 2
-		ELSE 3
-	END,s.full_name,s.id LIMIT $12 OFFSET $13`, append(args, o.Limit, o.Offset)...)
+	query := `SELECT ` + spiritCols + ` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id WHERE ` + filter
+	queryArgs := args
+	if o.GroupByTablet {
+		query = `WITH selected_groups AS (
+			SELECT COALESCE(s.tablet_id,'unplaced:'||s.id) AS tablet_group
+			FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id
+			WHERE ` + filter + `
+			GROUP BY COALESCE(s.tablet_id,'unplaced:'||s.id),h.name,a.code,p.column_number,p.row_number,t.name
+			ORDER BY h.name,a.code,p.column_number NULLS LAST,p.row_number NULLS LAST,t.name NULLS LAST,COALESCE(s.tablet_id,'unplaced:'||s.id)
+			LIMIT $12 OFFSET $13
+		)
+		SELECT ` + spiritCols + ` FROM spirits s JOIN spirit_houses h ON h.id=s.house_id LEFT JOIN memorial_tablets t ON t.id=s.tablet_id LEFT JOIN memorial_positions p ON p.id=t.position_id LEFT JOIN memorial_areas a ON a.id=p.area_id
+		JOIN selected_groups g ON g.tablet_group=COALESCE(s.tablet_id,'unplaced:'||s.id)
+		WHERE ` + filter + `
+		ORDER BY h.name,a.code,p.column_number NULLS LAST,p.row_number NULLS LAST,t.name NULLS LAST,g.tablet_group,s.full_name,s.id`
+		queryArgs = append(queryArgs, o.Limit, o.Offset)
+	} else {
+		query += ` ORDER BY CASE
+			WHEN $8='' THEN 0
+			WHEN unaccent(lower(s.full_name))=unaccent(lower($8)) THEN 0
+			WHEN unaccent(lower(s.full_name)) LIKE unaccent(lower($8))||'%' THEN 1
+			WHEN unaccent(lower(s.full_name)) LIKE '%'||unaccent(lower($8))||'%' THEN 2
+			ELSE 3
+		END,s.full_name,s.id LIMIT $12 OFFSET $13`
+		queryArgs = append(queryArgs, o.Limit, o.Offset)
+	}
+	rows, e := s.pool.Query(ctx, query, queryArgs...)
 	if e != nil {
 		return nil, 0, e
 	}
@@ -819,7 +839,7 @@ type scanner interface{ Scan(...any) error }
 
 func scanSpirit(r scanner) (Spirit, error) {
 	var v Spirit
-	e := r.Scan(&v.ID, &v.TabletID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionID, &v.PositionName, &v.TabletName, &v.FullName, &v.DharmaName, &v.BirthYear, &v.DeathYear, &v.Age, &v.ImageURL, &v.BurialPlace, &v.Sender, &v.SentMonth, &v.Notes, &v.HasUrn, &v.CreatedAt, &v.UpdatedAt)
+	e := r.Scan(&v.ID, &v.TabletID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionID, &v.PositionName, &v.TabletName, &v.TabletImageURL, &v.FullName, &v.DharmaName, &v.BirthYear, &v.DeathYear, &v.Age, &v.ImageURL, &v.BurialPlace, &v.Sender, &v.SentMonth, &v.Notes, &v.HasUrn, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
 func mapErr(e error) error {

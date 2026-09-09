@@ -1,0 +1,15 @@
+yarn run v1.22.22
+$ vite dev --host 127.0.0.1
+
+  VITE v8.2.0  ready in 11621 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+10:13:46 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:18:41 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:25:07 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:25:18 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:25:43 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:25:57 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:26:18 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:37:26 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+10:37:34 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css

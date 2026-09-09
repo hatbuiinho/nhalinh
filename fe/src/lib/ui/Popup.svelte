@@ -4,12 +4,16 @@
 	let {
 		open = false,
 		title = '',
+		sizeClass = 'max-w-sm',
+		layerClass = 'z-40',
 		onClose,
 		children,
 		footer
 	}: {
 		open?: boolean;
 		title?: string;
+		sizeClass?: string;
+		layerClass?: string;
 		onClose?: () => void;
 		children?: Snippet;
 		footer?: Snippet;
@@ -17,7 +21,7 @@
 </script>
 
 {#if open}
-	<div class="fixed inset-0 z-40 grid place-items-center px-4" role="presentation">
+	<div class={`fixed inset-0 grid place-items-center px-4 ${layerClass}`} role="presentation">
 		<button
 			type="button"
 			class="absolute inset-0 h-full w-full cursor-default bg-[rgb(24_32_28_/_0.34)]"
@@ -25,7 +29,7 @@
 			onclick={onClose}
 		></button>
 		<div
-			class="relative z-10 flex max-h-[calc(100dvh-2rem)] w-full max-w-sm flex-col rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-popover)]"
+			class={`relative z-10 flex max-h-[calc(100dvh-2rem)] w-full ${sizeClass} flex-col rounded-[14px] border border-[var(--color-border)] bg-[var(--color-surface)] p-4 shadow-[var(--shadow-popover)]`}
 			role="dialog"
 			aria-modal="true"
 			aria-label={title}

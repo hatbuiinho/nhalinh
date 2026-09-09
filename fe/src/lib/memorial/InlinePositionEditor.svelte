@@ -14,6 +14,13 @@
 		areaCode: string;
 	} = $props();
 	let sheetPaste = $state('');
+	let matrix = $state({
+		columnFrom: '1',
+		columnTo: '',
+		rowFrom: '1',
+		rowTo: '',
+		notes: ''
+	});
 
 	function addRow() {
 		items = [...items, emptyPositionRow()];
@@ -33,6 +40,48 @@
 			toastStore.error(error instanceof Error ? error.message : 'Không thể nhập dữ liệu');
 		}
 	}
+	function createMatrix() {
+		const columnFrom = Number(matrix.columnFrom);
+		const columnTo = Number(matrix.columnTo);
+		const rowFrom = Number(matrix.rowFrom);
+		const rowTo = Number(matrix.rowTo);
+		if (![columnFrom, columnTo, rowFrom, rowTo].every(Number.isInteger)) {
+			toastStore.error('Cột và hàng phải là số nguyên lớn hơn 0');
+			return;
+		}
+		if (columnFrom < 1 || rowFrom < 1 || columnTo < columnFrom || rowTo < rowFrom) {
+			toastStore.error('Khoảng cột hoặc hàng không hợp lệ');
+			return;
+		}
+
+		const total = (columnTo - columnFrom + 1) * (rowTo - rowFrom + 1);
+		if (total > 500) {
+			toastStore.error('Mỗi lần chỉ có thể tạo tối đa 500 vị trí');
+			return;
+		}
+
+		const current = items.filter((row) => Object.values(row).some((value) => value.trim()));
+		const coordinates = new Set(current.map((row) => `${row.column_number}:${row.row_number}`));
+		const generated: EditablePositionRow[] = [];
+		for (let column = columnFrom; column <= columnTo; column += 1) {
+			for (let row = rowFrom; row <= rowTo; row += 1) {
+				const coordinate = `${column}:${row}`;
+				if (coordinates.has(coordinate)) continue;
+				coordinates.add(coordinate);
+				generated.push({
+					column_number: String(column),
+					row_number: String(row),
+					notes: matrix.notes
+				});
+			}
+		}
+		if (current.length + generated.length > 500) {
+			toastStore.error('Danh sách vị trí chỉ có thể chứa tối đa 500 dòng mỗi lần lưu');
+			return;
+		}
+		items = [...current, ...generated];
+		toastStore.success(`Đã thêm ${generated.length} vị trí vào danh sách`);
+	}
 	function displayName(position: EditablePositionRow) {
 		return position.row_number && position.column_number
 			? `${position.column_number}${areaCode}-${position.row_number}`
@@ -42,6 +91,64 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<div class="shrink-0 border-b border-[var(--color-border)] pb-3">
+		<div
+			class="mb-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3"
+		>
+			<div class="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
+				<span class="text-sm font-semibold">Tạo vị trí theo ma trận</span>
+				<span class="text-xs text-[var(--color-text-secondary)]"
+					>Ví dụ: cột 1–10, hàng 1–5 sẽ tạo 50 vị trí</span
+				>
+			</div>
+			<div class="grid gap-2 sm:grid-cols-5">
+				<label
+					><span class="mb-1 block text-xs font-medium">Cột từ *</span><input
+						bind:value={matrix.columnFrom}
+						type="number"
+						min="1"
+						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
+					/></label
+				>
+				<label
+					><span class="mb-1 block text-xs font-medium">Cột đến *</span><input
+						bind:value={matrix.columnTo}
+						type="number"
+						min="1"
+						placeholder="10"
+						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
+					/></label
+				>
+				<label
+					><span class="mb-1 block text-xs font-medium">Hàng từ *</span><input
+						bind:value={matrix.rowFrom}
+						type="number"
+						min="1"
+						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
+					/></label
+				>
+				<label
+					><span class="mb-1 block text-xs font-medium">Hàng đến *</span><input
+						bind:value={matrix.rowTo}
+						type="number"
+						min="1"
+						placeholder="5"
+						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
+					/></label
+				>
+				<label
+					><span class="mb-1 block text-xs font-medium">Ghi chú chung</span><input
+						bind:value={matrix.notes}
+						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
+					/></label
+				>
+			</div>
+			<button
+				type="button"
+				onclick={createMatrix}
+				class="mt-3 h-9 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"
+				>Tạo các vị trí</button
+			>
+		</div>
 		<div class="flex items-center gap-2">
 			<label class="min-w-0 flex-1"
 				><span class="mb-1 block text-xs font-medium">Dán từ Excel / Google Sheets</span><textarea

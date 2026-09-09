@@ -277,7 +277,7 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
 	now := s.now().UTC()
-	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now}
+	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {
 		spiritInput.TabletID = tablet.ID
@@ -316,7 +316,7 @@ func (s *Service) UpdateTablet(ctx context.Context, actor Actor, id string, in T
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
 	now := s.now().UTC()
-	tablet := Tablet{ID: id, PositionID: in.PositionID, Name: name, Notes: strings.TrimSpace(in.Notes), UpdatedAt: now}
+	tablet := Tablet{ID: id, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	seenIDs := make(map[string]bool, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {

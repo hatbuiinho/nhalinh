@@ -107,8 +107,9 @@
 			column_number: number;
 			notes: string;
 		}>({ row_number: 1, column_number: 1, notes: '' }),
-		tabletForm = $state<{ name: string; spirits: EditableSpiritInput[] }>({
+		tabletForm = $state<{ name: string; image_url: string; sender: string; notes: string; spirits: EditableSpiritInput[] }>({
 			name: '',
+			image_url: '', sender: '', notes: '',
 			spirits: [emptyInlineSpirit()]
 		});
 	let house = $derived(houses.find((v) => v.id === houseId));
@@ -390,7 +391,7 @@
 			editingTablet = null;
 			pendingTabletCoordinate = null;
 			selectedUnplacedSpirits = [];
-			tabletForm = { name: '', spirits: [emptyInlineSpirit()] };
+			tabletForm = { name: '', image_url: '', sender: '', notes: '', spirits: [emptyInlineSpirit()] };
 		}
 	}
 	function editPosition(position: Position) {
@@ -411,6 +412,7 @@
 			selectedUnplacedSpirits = [];
 			tabletForm = {
 				name: tablet.name,
+				image_url: tablet.image_url, sender: tablet.sender, notes: tablet.notes,
 				spirits: items.map((spirit) => ({
 					id: spirit.id,
 					full_name: spirit.full_name,
@@ -508,7 +510,7 @@
 				const payload = {
 					position_id: targetPositionID,
 					name: tabletForm.name,
-					notes: '',
+					image_url: tabletForm.image_url, sender: tabletForm.sender, notes: tabletForm.notes,
 					spirits
 				};
 				if (editingTablet) await updateTablet(editingTablet.id, payload);
@@ -1034,6 +1036,7 @@
 							Vị trí sẽ được tạo: {pendingTabletCoordinate.columnNumber}{areas.find((area) => area.id === areaId)?.code ?? ''}-{pendingTabletCoordinate.rowNumber}
 						</p>{/if}
 						<div>
+							{#if editingTablet}<p class="mb-3 rounded-md bg-[var(--color-primary-soft)] px-3 py-2 text-sm text-[var(--color-primary-dark)]">Vị trí: {editingTablet.position_name || 'Chưa xếp vị trí'}</p>{/if}
 							<label class="block"
 								><span class="mb-1 block text-sm">Tên bài vị *</span><input
 									bind:this={tabletNameInput}
@@ -1044,6 +1047,8 @@
 								/></label
 							>
 						</div>
+						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Ảnh Bài vị (URL)</span><input bind:value={tabletForm.image_url} readonly={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label class="block"><span class="mb-1 block text-sm">Người gửi</span><input bind:value={tabletForm.sender} readonly={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
+						{@render textarea('Ghi chú', tabletForm)}
 						{#if !editingTablet}<UnplacedSpiritPicker
 								houseId={selectedPosition?.house_id ?? houseId}
 								bind:selected={selectedUnplacedSpirits}

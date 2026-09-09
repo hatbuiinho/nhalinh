@@ -3,12 +3,16 @@
 	import Lightbox from '$lib/ui/Lightbox.svelte';
 	import { toastStore } from '$lib/ui/toast-store.svelte';
 	import SpiritPortrait from './SpiritPortrait.svelte';
+	import TabletPortrait from './TabletPortrait.svelte';
 	let {
 		imageUrl = '',
 		displayName,
 		uploading = false,
 		compact = false,
 		readOnly = false,
+		tablet = false,
+		compactFrame = false,
+		portraitClass = '',
 		onselect
 	}: {
 		imageUrl?: string;
@@ -16,6 +20,9 @@
 		uploading?: boolean;
 		compact?: boolean;
 		readOnly?: boolean;
+		tablet?: boolean;
+		compactFrame?: boolean;
+		portraitClass?: string;
 		onselect: (file: File) => void | Promise<void>;
 	} = $props();
 	let input = $state<HTMLInputElement>(),
@@ -51,15 +58,15 @@
 		onclick={() => imageUrl && (lightboxOpen = true)}
 		class={[
 			'relative grid aspect-[3/4] shrink-0 place-items-center overflow-visible',
-			compact ? 'w-12 text-sm' : 'w-28 text-2xl'
+			compact ? 'w-12 text-sm' : portraitClass || 'w-28 text-2xl'
 		]}
-		><SpiritPortrait imageUrl={imageUrl} alt={displayName} sizeClass="h-full w-full" />{#if uploading}<span
+		>{#if tablet}<TabletPortrait imageUrl={imageUrl} name={displayName} sizeClass="h-full w-full" />{:else}<SpiritPortrait imageUrl={imageUrl} alt={displayName} sizeClass="h-full w-full" compact={compactFrame} />{/if}{#if uploading}<span
 				class="absolute inset-0 grid place-items-center bg-black/45 text-white"
 				><span class="icon-[lucide--loader-circle] h-6 w-6 animate-spin"></span></span
 			>{/if}</button
 	>
 	{#if !readOnly}<div class={compact ? 'shrink-0' : ''}>
-			{#if !compact}<p class="text-sm font-semibold">Ảnh Hương linh</p>
+			{#if !compact}<p class="text-sm font-semibold">Ảnh {tablet ? 'Bài vị' : 'Hương linh'}</p>
 				<p class="mt-1 text-sm text-[var(--color-text-secondary)]">
 					Ảnh được cắt theo tỉ lệ chân dung 3:4.
 				</p>{/if}
@@ -91,7 +98,7 @@
 	aspectRatio={3 / 4}
 	outputWidth={900}
 	outputHeight={1200}
-	title="Cắt ảnh Hương linh"
+	title={`Cắt ảnh ${tablet ? 'Bài vị' : 'Hương linh'}`}
 	description="Ảnh sẽ được lưu theo tỉ lệ chân dung 3:4"
 	onclose={() => {
 		if (!uploading) {

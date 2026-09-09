@@ -1,0 +1,1 @@
+DROP INDEX IF EXISTS idx_spirits_active_house_tablet_name;
