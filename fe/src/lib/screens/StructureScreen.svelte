@@ -118,9 +118,9 @@
 			column_number: number;
 			notes: string;
 		}>({ row_number: 1, column_number: 1, notes: '' }),
-		tabletForm = $state<{ name: string; image_url: string; sender: string; notes: string; status: Tablet['status']; type: Tablet['type']; spirits: EditableSpiritInput[] }>({
-			name: '',
-			image_url: '', sender: '', notes: '', status: 'enshrined', type: 'spirit',
+		tabletForm = $state<{ name: string; code: string; registered_at: string; enshrined_at: string; entered_worship_area_at: string; image_url: string; sender: string; notes: string; status: Tablet['status']; type: Tablet['type']; spirits: EditableSpiritInput[] }>({
+			name: '', code: '', registered_at: '', enshrined_at: '', entered_worship_area_at: '',
+			image_url: '', sender: '', notes: '', status: 'pending', type: 'spirit',
 			spirits: [emptyInlineSpirit()]
 		});
 	let house = $derived(houses.find((v) => v.id === houseId));
@@ -447,7 +447,7 @@
 		if (next === 'tablet') {
 			editingTablet = null;
 			selectedUnplacedSpirits = [];
-			tabletForm = { name: '', image_url: '', sender: '', notes: '', status: 'enshrined', type: 'spirit', spirits: [emptyInlineSpirit()] };
+			tabletForm = { name: '', code: '', registered_at: '', enshrined_at: '', entered_worship_area_at: '', image_url: '', sender: '', notes: '', status: 'pending', type: 'spirit', spirits: [emptyInlineSpirit()] };
 		}
 		captureFormSnapshot();
 	}
@@ -469,7 +469,7 @@
 			editingTablet = tablet;
 			selectedUnplacedSpirits = [];
 			tabletForm = {
-				name: tablet.name,
+				name: tablet.name, code: tablet.code || tablet.name, registered_at: tablet.registered_at, enshrined_at: tablet.enshrined_at, entered_worship_area_at: tablet.entered_worship_area_at,
 				image_url: tablet.image_url, sender: tablet.sender, notes: tablet.notes, status: tablet.status, type: tablet.type,
 				spirits: items.map((spirit) => ({
 					id: spirit.id,
@@ -552,7 +552,7 @@
 				const tabletImage = tabletForm.image_url || (spirits.length === 1 ? spirits[0].image_url : '');
 				const payload = {
 					position_id: targetPositionID,
-					name: tabletForm.name,
+					name: tabletForm.code, code: tabletForm.code, registered_at: tabletForm.registered_at, enshrined_at: tabletForm.enshrined_at, entered_worship_area_at: tabletForm.entered_worship_area_at,
 					image_url: tabletImage, sender: tabletForm.sender, notes: tabletForm.notes, status: tabletForm.status, type: tabletForm.type,
 					spirits
 				};
@@ -651,10 +651,10 @@
 		else if (positionFullscreen) positionFullscreen = false;
 	}
 	function tabletTypeLabel(type: Tablet['type']) {
-		return type === 'ancestral' ? 'Cửu Huyền Thất Tổ' : type === 'family' ? 'Gia tiên' : 'Hương linh';
+		return ({ spirit: 'Hương linh', giac_linh: 'Giác linh', family: 'Gia tiên', cuu_huyen: 'Cửu Huyền Thất Tổ', clan: 'Tộc họ', collective: 'Chư Hương linh', fetus: 'Thai nhi', martyr: 'Anh hùng liệt sĩ', victim: 'Hương linh tử nạn', childless: 'Hương linh vô tự', unknown: 'Hương linh vô danh', other: 'Khác' })[type];
 	}
 	function tabletStatusLabel(status: Tablet['status']) {
-		return status === 'pending' ? 'Chưa an vị' : status === 'enshrined' ? 'Đã an vị' : status === 'moving' ? 'Đang di dời' : status === 'moved' ? 'Đã di dời / lưu kho' : 'Lưu trữ';
+		return status === 'pending' ? 'Chờ an vị' : status === 'enshrined' ? 'Đã an vị' : 'Đã thỉnh về';
 	}
 	function editHouse(item: House) {
 		editingHouse = item; houseForm = { name: item.name, address: item.address, notes: item.notes }; houseManagerOpen = false; mode = 'house'; captureFormSnapshot();
@@ -700,6 +700,7 @@
 		<div class="mb-5 flex shrink-0 flex-wrap gap-2">
 			{#if authStore.user?.role === 'admin'}<button type="button" onclick={() => (houseManagerOpen = true)} class="h-11 rounded-md bg-[var(--color-primary)] px-4 text-sm font-semibold text-white shadow-sm"><span class="mr-1.5 icon-[lucide--building-2] inline-block h-4 w-4 align-text-bottom"></span>Quản lý Nhà Linh</button>{/if}
 			{#if canWrite && houseId}<button type="button" onclick={() => (areaManagerOpen = true)} class="h-11 rounded-md border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-4 text-sm font-semibold text-[var(--color-primary-dark)]"><span class="mr-1.5 icon-[lucide--map] inline-block h-4 w-4 align-text-bottom"></span>Quản lý Khu vực</button>{/if}
+			{#if houseId}<button type="button" onclick={() => openUnplacedTablets()} class="h-11 rounded-md border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)] px-4 text-sm font-semibold text-[var(--color-primary-dark)]"><span class="mr-1.5 icon-[lucide--list] inline-block h-4 w-4 align-text-bottom"></span>Bài vị chưa xếp ({unplacedTablets.length})</button>{/if}
 		</div>
 		{#if loading}<div class="py-16">
 				<LoadingIndicator label="Đang tải cơ cấu tổ chức..." />
@@ -707,12 +708,12 @@
 				class="rounded-md border border-dashed py-16 text-center"
 			>
 				<p class="font-semibold">Chưa có Nhà Linh</p>
-			</div>{:else}<div class="grid gap-5 lg:min-h-0 lg:flex-1 lg:grid-cols-[230px_1fr]">
-				<aside class="lg:min-h-0 lg:overflow-y-auto lg:pr-1">
+			</div>{:else}<div class="flex min-h-0 flex-1 flex-col gap-5">
+				<aside>
 					<div class="mb-2 flex items-center justify-between">
 						<h2 class="text-sm font-semibold">Khu vực</h2>
 					</div>
-					<div class="space-y-2">
+					<div class="flex gap-2 overflow-x-auto pb-1">
 						{#each areas as area (area.id)}<button
 								type="button"
 								onclick={() => {
@@ -720,23 +721,17 @@
 									void selectArea();
 								}}
 								class={[
-									'w-full rounded-md border p-3 text-left',
+									'w-[138px] shrink-0 rounded-md border px-2.5 py-2 text-left',
 									areaId === area.id
 										? 'border-[var(--color-primary)] bg-[var(--color-primary-soft)]'
 										: 'border-[var(--color-border)] bg-[var(--color-surface)]'
 								]}
-								><span class="font-semibold">Khu {area.code}</span>{#if area.name}<span
-										class="ml-1 text-sm">· {area.name}</span
-									>{/if}<span class="mt-1 block text-xs text-[var(--color-text-secondary)]"
+								><span class="text-sm font-semibold">Khu {area.code}</span>{#if area.name}<span
+										class="ml-1 text-xs">· {area.name}</span
+									>{/if}<span class="mt-0.5 block text-[11px] text-[var(--color-text-secondary)]"
 									>{area.position_count} vị trí · {area.tablet_count} bài vị</span
 								></button
 							>{/each}
-					</div>
-					<div class="mt-6 rounded-md border border-dashed border-[var(--color-border-strong)] bg-[var(--color-surface)] p-3">
-						<div class="flex items-center justify-between gap-2">
-							<div><h3 class="text-sm font-semibold">Bài vị chưa xếp</h3><p class="mt-1 text-xs text-[var(--color-text-secondary)]">{unplacedTablets.length} bài vị chưa có vị trí</p></div>
-							<button type="button" onclick={() => openUnplacedTablets()} class="grid h-8 w-8 place-items-center rounded-md text-[var(--color-primary-dark)] hover:bg-[var(--color-primary-soft)]" aria-label="Xem bài vị chưa xếp" title="Xem bài vị chưa xếp"><span class="icon-[lucide--list] h-4 w-4"></span></button>
-						</div>
 					</div>
 				</aside>
 				<main
@@ -1116,9 +1111,9 @@
 						<div>
 							{#if editingTablet}<p class="mb-3 rounded-md bg-[var(--color-primary-soft)] px-3 py-2 text-sm text-[var(--color-primary-dark)]">Vị trí: {editingTablet.position_name || 'Chưa xếp vị trí'}</p>{/if}
 							<label class="block"
-								><span class="mb-1 block text-sm">Tên bài vị *</span><input
-									bind:this={tabletNameInput}
-									bind:value={tabletForm.name}
+				><span class="mb-1 block text-sm">Mã bài vị *</span><input
+					bind:this={tabletNameInput}
+					bind:value={tabletForm.code}
 									required={canWrite}
 									readonly={!canWrite}
 									class="h-10 w-full rounded-md border-[var(--color-border-strong)]"
@@ -1126,7 +1121,7 @@
 							>
 						</div>
 						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Ảnh Bài vị (URL)</span><input bind:value={tabletForm.image_url} readonly={!canWrite} placeholder="Tự lấy ảnh Hương linh khi chỉ có một người" class="h-10 w-full rounded-md border-[var(--color-border-strong)]" />{#if !tabletForm.image_url && tabletForm.spirits.length === 1 && tabletForm.spirits[0].image_url}<span class="mt-1 block text-xs text-[var(--color-text-secondary)]">Đang dùng mặc định ảnh của Hương linh.</span>{:else if !tabletForm.image_url && tabletForm.spirits.length > 1}<span class="mt-1 block text-xs text-[var(--color-text-secondary)]">Nhiều Hương linh: hãy chọn hoặc tải ảnh Bài vị; khi chưa chọn sẽ dùng ảnh Hương linh có sẵn để hiển thị.</span>{/if}</label><label class="block"><span class="mb-1 block text-sm">Người gửi</span><input bind:value={tabletForm.sender} readonly={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
-						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Loại Bài vị</span><select bind:value={tabletForm.type} disabled={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="spirit">Hương linh</option><option value="ancestral">Cửu Huyền Thất Tổ</option><option value="family">Gia tiên</option></select></label><label class="block"><span class="mb-1 block text-sm">Trạng thái Bài vị</span><select bind:value={tabletForm.status} disabled={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="pending">Chưa an vị</option><option value="enshrined">Đã an vị</option><option value="moving">Đang di dời</option><option value="moved">Đã di dời / lưu kho</option><option value="archived">Lưu trữ</option></select></label></div>
+						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Loại Bài vị</span><select bind:value={tabletForm.type} disabled={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="spirit">Hương linh</option><option value="giac_linh">Giác linh</option><option value="family">Gia tiên</option><option value="cuu_huyen">Cửu Huyền Thất Tổ</option><option value="clan">Tộc họ</option><option value="collective">Chư Hương linh</option><option value="fetus">Thai nhi</option><option value="martyr">Anh hùng liệt sĩ</option><option value="victim">Hương linh tử nạn</option><option value="childless">Hương linh vô tự</option><option value="unknown">Hương linh vô danh</option><option value="other">Khác</option></select></label><label class="block"><span class="mb-1 block text-sm">Trạng thái *</span><select bind:value={tabletForm.status} disabled={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="pending">Chờ an vị</option><option value="enshrined">Đã an vị</option><option value="taken_home">Đã thỉnh về</option></select></label></div><div class="grid gap-3 md:grid-cols-3"><label><span class="mb-1 block text-sm">Ngày đăng ký</span><input type="date" bind:value={tabletForm.registered_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label><span class="mb-1 block text-sm">Ngày an vị</span><input type="date" bind:value={tabletForm.enshrined_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label><span class="mb-1 block text-sm">Ngày đưa vào khu thờ</span><input type="date" bind:value={tabletForm.entered_worship_area_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
 						{@render textarea('Ghi chú', tabletForm)}
 						{#if !editingTablet}<UnplacedSpiritPicker
 								houseId={selectedPosition?.house_id ?? houseId}

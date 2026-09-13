@@ -360,8 +360,8 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 		return Tablet{}, err
 	}
 	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return Tablet{}, fmt.Errorf("%w: tablet name is required", ErrInvalidInput)
+	if name == "" && len(in.Spirits) > 0 {
+		name = strings.TrimSpace(in.Spirits[0].FullName)
 	}
 	existingSpiritIDs := make([]string, 0, len(in.ExistingSpiritIDs))
 	seenExistingIDs := make(map[string]bool, len(in.ExistingSpiritIDs))
@@ -385,7 +385,7 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 	if err != nil {
 		return Tablet{}, err
 	}
-	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), Status: status, Type: tabletType, CreatedAt: now, UpdatedAt: now}
+	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, Code: "", RegisteredAt: strings.TrimSpace(in.RegisteredAt), EnshrinedAt: strings.TrimSpace(in.EnshrinedAt), EnteredWorshipAreaAt: strings.TrimSpace(in.EnteredWorshipAreaAt), ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), Status: status, Type: tabletType, CreatedAt: now, UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {
 		spiritInput.TabletID = tablet.ID
@@ -417,9 +417,6 @@ func (s *Service) UpdateTablet(ctx context.Context, actor Actor, id string, in T
 		return Tablet{}, fmt.Errorf("%w: cannot move tablet to another house", ErrInvalidInput)
 	}
 	name := strings.TrimSpace(in.Name)
-	if name == "" {
-		return Tablet{}, fmt.Errorf("%w: tablet name is required", ErrInvalidInput)
-	}
 	if len(in.Spirits) == 0 || len(in.Spirits) > 500 {
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
@@ -432,7 +429,7 @@ func (s *Service) UpdateTablet(ctx context.Context, actor Actor, id string, in T
 	if err != nil {
 		return Tablet{}, err
 	}
-	tablet := Tablet{ID: id, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), Status: status, Type: tabletType, UpdatedAt: now}
+	tablet := Tablet{ID: id, PositionID: in.PositionID, Name: name, Code: "", RegisteredAt: strings.TrimSpace(in.RegisteredAt), EnshrinedAt: strings.TrimSpace(in.EnshrinedAt), EnteredWorshipAreaAt: strings.TrimSpace(in.EnteredWorshipAreaAt), ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), Status: status, Type: tabletType, UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	seenIDs := make(map[string]bool, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {
@@ -699,7 +696,7 @@ func normalizeTabletStatus(raw, fallback string) (string, error) {
 		status = fallback
 	}
 	switch status {
-	case "pending", "enshrined", "moving", "moved", "archived":
+	case "pending", "enshrined", "taken_home":
 		return status, nil
 	default:
 		return "", fmt.Errorf("%w: invalid tablet status", ErrInvalidInput)
@@ -710,7 +707,7 @@ func normalizeTabletType(raw string) (string, error) {
 	if tabletType == "" {
 		return "spirit", nil
 	}
-	if !map[string]bool{"ancestral": true, "spirit": true, "family": true}[tabletType] {
+	if !map[string]bool{"spirit": true, "giac_linh": true, "family": true, "cuu_huyen": true, "clan": true, "collective": true, "fetus": true, "martyr": true, "victim": true, "childless": true, "unknown": true, "other": true}[tabletType] {
 		return "", fmt.Errorf("%w: invalid tablet type", ErrInvalidInput)
 	}
 	return tabletType, nil

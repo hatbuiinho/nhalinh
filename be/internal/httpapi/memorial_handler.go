@@ -36,15 +36,19 @@ type positionsBatchPayload struct {
 	Positions []positionPayload `json:"positions"`
 }
 type tabletPayload struct {
-	PositionID        string          `json:"position_id"`
-	Name              string          `json:"name"`
-	ImageURL          string          `json:"image_url"`
-	Sender            string          `json:"sender"`
-	Notes             string          `json:"notes"`
-	Status            string          `json:"status"`
-	Type              string          `json:"type"`
-	Spirits           []spiritPayload `json:"spirits"`
-	ExistingSpiritIDs []string        `json:"existing_spirit_ids"`
+	PositionID           string          `json:"position_id"`
+	Name                 string          `json:"name"`
+	Code                 string          `json:"code"`
+	RegisteredAt         string          `json:"registered_at"`
+	EnshrinedAt          string          `json:"enshrined_at"`
+	EnteredWorshipAreaAt string          `json:"entered_worship_area_at"`
+	ImageURL             string          `json:"image_url"`
+	Sender               string          `json:"sender"`
+	Notes                string          `json:"notes"`
+	Status               string          `json:"status"`
+	Type                 string          `json:"type"`
+	Spirits              []spiritPayload `json:"spirits"`
+	ExistingSpiritIDs    []string        `json:"existing_spirit_ids"`
 }
 type tabletMovePayload struct {
 	PositionID string `json:"position_id"`
@@ -279,7 +283,7 @@ func (h *MemorialHandler) Tablets(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Status: p.Status, Type: p.Type, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
+		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Code: p.Code, RegisteredAt: p.RegisteredAt, EnshrinedAt: p.EnshrinedAt, EnteredWorshipAreaAt: p.EnteredWorshipAreaAt, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Status: p.Status, Type: p.Type, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
 		h.write(w, v, e, 201)
 	default:
 		methodNotAllowed(w)
@@ -308,7 +312,7 @@ func (h *MemorialHandler) Tablet(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Status: p.Status, Type: p.Type, Spirits: spirits})
+		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, Code: p.Code, RegisteredAt: p.RegisteredAt, EnshrinedAt: p.EnshrinedAt, EnteredWorshipAreaAt: p.EnteredWorshipAreaAt, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Status: p.Status, Type: p.Type, Spirits: spirits})
 		h.write(w, v, e, 200)
 	case http.MethodDelete:
 		e := h.service.DeleteTablet(r.Context(), actor(r), id, r.URL.Query().Get("delete_spirits") == "true")

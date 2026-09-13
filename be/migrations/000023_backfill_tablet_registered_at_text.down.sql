@@ -1,0 +1,1 @@
+-- Không thể khôi phục giá trị trống trước đó mà không làm mất dữ liệu đã có.

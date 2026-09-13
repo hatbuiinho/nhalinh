@@ -37,6 +37,7 @@ export type Position = {
 	spirit_count: number;
 	spirit_names: string[];
 	tablet_statuses: Array<'pending' | 'enshrined' | 'moving' | 'moved' | 'archived'>;
+	tablet_types: Tablet['type'][];
 	single_spirit_name: string;
 	single_spirit_birth_year: string;
 	single_spirit_death_year: string;
@@ -76,11 +77,15 @@ export type Tablet = {
 	row_number: number;
 	column_number: number;
 	name: string;
+	code: string;
+	registered_at: string;
+	enshrined_at: string;
+	entered_worship_area_at: string;
 	image_url: string;
 	sender: string;
 	notes: string;
-	status: 'pending' | 'enshrined' | 'moving' | 'moved' | 'archived';
-	type: 'ancestral' | 'spirit' | 'family';
+	status: 'pending' | 'enshrined' | 'taken_home';
+	type: 'spirit' | 'giac_linh' | 'family' | 'cuu_huyen' | 'clan' | 'collective' | 'fetus' | 'martyr' | 'victim' | 'childless' | 'unknown' | 'other';
 	spirit_count: number;
 };
 export type Spirit = {
@@ -93,7 +98,12 @@ export type Spirit = {
 	position_id: string;
 	position_name: string;
 	tablet_name: string;
+	tablet_code: string;
 	tablet_image_url: string;
+	tablet_registered_at: string;
+	tablet_sender: string;
+	tablet_type: Tablet['type'];
+	tablet_status: Tablet['status'] | '';
 	full_name: string;
 	dharma_name: string;
 	familiar_name: string;
@@ -247,6 +257,11 @@ export const listUnplacedTablets = async (houseId: string, query = '') => {
 export const createTablet = (input: {
 	position_id: string;
 	name: string;
+	code?: string;
+	registered_at?: string;
+	enshrined_at?: string;
+	entered_worship_area_at?: string;
+	type?: Tablet['type'];
 	image_url: string;
 	sender: string;
 	notes: string;
@@ -259,6 +274,11 @@ export const updateTablet = (
 	input: {
 		position_id: string;
 		name: string;
+		code?: string;
+		registered_at?: string;
+		enshrined_at?: string;
+		entered_worship_area_at?: string;
+		type?: Tablet['type'];
 		image_url: string;
 		sender: string;
 		notes: string;

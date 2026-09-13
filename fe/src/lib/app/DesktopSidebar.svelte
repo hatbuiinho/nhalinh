@@ -94,7 +94,7 @@
 		]}
 	>
 		{#if !collapsed}
-			<div class="relative w-full"><select bind:value={houseFilter.id} onchange={selectHouse} aria-label="Chọn Nhà Linh" class="h-12 w-full appearance-none rounded-md border border-[var(--color-border-strong)] bg-[url('/icons/icon.svg')] bg-no-repeat bg-[var(--color-surface)] py-1 pr-10 pl-12 text-sm font-semibold [background-position:10px_center] [background-size:28px]">{#each houses as house (house.id)}<option value={house.id}>{houseLabel(house.name)}</option>{/each}</select><span class="pointer-events-none absolute top-1/2 right-3 icon-[lucide--chevron-down] h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" aria-hidden="true"></span></div>
+			<div class="w-full"><select bind:value={houseFilter.id} onchange={selectHouse} aria-label="Chọn Nhà Linh" class="h-12 w-full appearance-none rounded-md border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-3 py-1 text-sm font-semibold">{#each houses as house (house.id)}<option value={house.id}>{houseLabel(house.name)}</option>{/each}</select></div>
 		{:else if collapsed}
 			<span class="h-8 w-8 bg-[url('/icons/icon.svg')] bg-contain bg-center bg-no-repeat" aria-label="Nhà Linh"></span>
 		{/if}

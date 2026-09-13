@@ -252,7 +252,7 @@
 <div
 	class={[
 		'flex flex-col overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]',
-		fullscreen ? 'min-h-0 flex-1' : 'max-h-[calc(100dvh-13rem)] min-h-[420px] lg:min-h-0 lg:flex-1'
+		fullscreen ? 'min-h-0 flex-1' : 'min-h-[620px] lg:min-h-[680px]'
 	]}
 >
 	<div
@@ -423,6 +423,7 @@
 									birthYear={position.single_spirit_birth_year}
 									deathYear={position.single_spirit_death_year}
 									status={position.tablet_statuses[0] ?? 'enshrined'}
+									tabletType={position.tablet_types[0] ?? 'spirit'}
 									fontSize={metricFontSize}
 									maxNameWords={4}
 								/>{:else if showPositionLabel}

@@ -54,6 +54,7 @@ type Position struct {
 	SpiritCount           int       `json:"spirit_count"`
 	SpiritNames           []string  `json:"spirit_names"`
 	TabletStatuses        []string  `json:"tablet_statuses"`
+	TabletTypes           []string  `json:"tablet_types"`
 	SingleSpiritName      string    `json:"single_spirit_name"`
 	SingleSpiritBirthYear string    `json:"single_spirit_birth_year"`
 	SingleSpiritDeathYear string    `json:"single_spirit_death_year"`
@@ -85,24 +86,28 @@ type Occupancy struct {
 	Positions []Position       `json:"positions"`
 }
 type Tablet struct {
-	ID           string    `json:"id"`
-	PositionID   string    `json:"position_id"`
-	HouseID      string    `json:"house_id"`
-	HouseName    string    `json:"house_name"`
-	AreaID       string    `json:"area_id"`
-	AreaCode     string    `json:"area_code"`
-	PositionName string    `json:"position_name"`
-	RowNumber    int       `json:"row_number"`
-	ColumnNumber int       `json:"column_number"`
-	Name         string    `json:"name"`
-	ImageURL     string    `json:"image_url"`
-	Sender       string    `json:"sender"`
-	Notes        string    `json:"notes"`
-	Status       string    `json:"status"`
-	Type         string    `json:"type"`
-	SpiritCount  int       `json:"spirit_count"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                   string    `json:"id"`
+	PositionID           string    `json:"position_id"`
+	HouseID              string    `json:"house_id"`
+	HouseName            string    `json:"house_name"`
+	AreaID               string    `json:"area_id"`
+	AreaCode             string    `json:"area_code"`
+	PositionName         string    `json:"position_name"`
+	RowNumber            int       `json:"row_number"`
+	ColumnNumber         int       `json:"column_number"`
+	Name                 string    `json:"name"`
+	Code                 string    `json:"code"`
+	RegisteredAt         string    `json:"registered_at"`
+	EnshrinedAt          string    `json:"enshrined_at"`
+	EnteredWorshipAreaAt string    `json:"entered_worship_area_at"`
+	ImageURL             string    `json:"image_url"`
+	Sender               string    `json:"sender"`
+	Notes                string    `json:"notes"`
+	Status               string    `json:"status"`
+	Type                 string    `json:"type"`
+	SpiritCount          int       `json:"spirit_count"`
+	CreatedAt            time.Time `json:"created_at"`
+	UpdatedAt            time.Time `json:"updated_at"`
 }
 type Spirit struct {
 	ID                   string     `json:"id"`
@@ -114,7 +119,12 @@ type Spirit struct {
 	PositionID           string     `json:"position_id"`
 	PositionName         string     `json:"position_name"`
 	TabletName           string     `json:"tablet_name"`
+	TabletCode           string     `json:"tablet_code"`
 	TabletImageURL       string     `json:"tablet_image_url"`
+	TabletRegisteredAt   string     `json:"tablet_registered_at"`
+	TabletSender         string     `json:"tablet_sender"`
+	TabletType           string     `json:"tablet_type"`
+	TabletStatus         string     `json:"tablet_status"`
 	FullName             string     `json:"full_name"`
 	DharmaName           string     `json:"dharma_name"`
 	FamiliarName         string     `json:"familiar_name"`
@@ -162,9 +172,9 @@ type PositionInput struct {
 	Notes                   string
 }
 type TabletInput struct {
-	PositionID, Name, ImageURL, Sender, Notes, Status, Type string
-	Spirits                                                 []SpiritInput
-	ExistingSpiritIDs                                       []string
+	PositionID, Name, Code, RegisteredAt, EnshrinedAt, EnteredWorshipAreaAt, ImageURL, Sender, Notes, Status, Type string
+	Spirits                                                                                                        []SpiritInput
+	ExistingSpiritIDs                                                                                              []string
 }
 type SpiritInput struct {
 	ID, HouseID, TabletID, FullName, DharmaName, FamiliarName, Gender, BirthDate, DeathDate, BirthLunar, DeathLunar, BirthYear, DeathYear, Status, EnteredWorshipAreaAt, EnshrinedAt, Age, ImageURL, BurialPlace, Sender, SentMonth, Notes string

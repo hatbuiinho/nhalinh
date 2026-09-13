@@ -31,6 +31,10 @@ fe/android/app/google-services.json
 # Go / Air
 be/tmp/
 
+# Local executables and runtime logs
+*.exe
+*.log
+
 # OTA generated artifacts
 be/storage/ota/**/*.zip
 be/storage/ota/**/latest.json

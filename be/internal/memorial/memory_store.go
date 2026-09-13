@@ -286,10 +286,12 @@ func (s *MemoryStore) ListPositions(_ context.Context, _ Actor, areaID string) (
 		v.HouseName = h.Name
 		spiritNames := []string{}
 		tabletStatuses := map[string]bool{}
+		tabletTypes := map[string]bool{}
 		for _, t := range s.tablets {
 			if t.PositionID == v.ID {
 				v.TabletCount++
 				tabletStatuses[t.Status] = true
+				tabletTypes[t.Type] = true
 				for _, spirit := range s.spirits {
 					if spirit.TabletID == t.ID && spirit.DeletedAt == nil {
 						v.SpiritCount++
@@ -310,6 +312,11 @@ func (s *MemoryStore) ListPositions(_ context.Context, _ Actor, areaID string) (
 			v.TabletStatuses = append(v.TabletStatuses, status)
 		}
 		sort.Strings(v.TabletStatuses)
+		v.TabletTypes = make([]string, 0, len(tabletTypes))
+		for tabletType := range tabletTypes {
+			v.TabletTypes = append(v.TabletTypes, tabletType)
+		}
+		sort.Strings(v.TabletTypes)
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -539,6 +546,22 @@ func (s *MemoryStore) MoveTablet(_ context.Context, tabletID, positionID string,
 func (s *MemoryStore) CreateTablet(_ context.Context, v Tablet) (Tablet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if v.Code == "" {
+		for number := 1; ; number++ {
+			candidate := fmt.Sprintf("BV%06d", number)
+			used := false
+			for _, tablet := range s.tablets {
+				if tablet.Code == candidate {
+					used = true
+					break
+				}
+			}
+			if !used {
+				v.Code = candidate
+				break
+			}
+		}
+	}
 	if v.Status == "" {
 		v.Status = "enshrined"
 	}
@@ -565,6 +588,22 @@ func (s *MemoryStore) CreateTablets(ctx context.Context, items []Tablet) ([]Tabl
 func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spirits []Spirit, existingSpiritIDs []string, houseID string) (Tablet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if v.Code == "" {
+		for number := 1; ; number++ {
+			candidate := fmt.Sprintf("BV%06d", number)
+			used := false
+			for _, tablet := range s.tablets {
+				if tablet.Code == candidate {
+					used = true
+					break
+				}
+			}
+			if !used {
+				v.Code = candidate
+				break
+			}
+		}
+	}
 	if v.Status == "" {
 		v.Status = "enshrined"
 	}
@@ -615,6 +654,7 @@ func (s *MemoryStore) UpdateTabletWithSpirits(_ context.Context, v Tablet, spiri
 			return Tablet{}, fmt.Errorf("%w: spirit does not belong to tablet", ErrInvalidInput)
 		}
 	}
+	v.Code = old.Code
 	v.CreatedAt = old.CreatedAt
 	s.tablets[v.ID] = v
 	kept := make(map[string]bool, len(spirits))

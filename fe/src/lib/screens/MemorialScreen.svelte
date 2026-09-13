@@ -68,6 +68,8 @@
 		| 'position_name'
 		| 'tablet_name'
 		| 'tablet_image_url'
+		| 'tablet_registered_at'
+		| 'tablet_sender'
 		| 'burial_place'
 		| 'sender'
 		| 'sent_month'
@@ -104,9 +106,9 @@
 		{ key: 'death_year', label: 'Năm mất', defaultWidth: 64 },
 		{ key: 'age', label: 'Tuổi', defaultWidth: 48 },
 		{ key: 'burial_place', label: 'Nơi an táng', defaultWidth: 144 },
-		{ key: 'sender', label: 'Người gửi', defaultWidth: 128 },
-		{ key: 'sent_month', label: 'Ngày gửi', defaultWidth: 96 },
-		{ key: 'has_urn', label: 'Hũ Cốt', defaultWidth: 80 },
+		{ key: 'tablet_registered_at', label: 'Ngày đăng ký', defaultWidth: 104 },
+		{ key: 'tablet_sender', label: 'Người gửi', defaultWidth: 128 },
+		{ key: 'has_urn', label: 'Tro cốt/hài cốt', defaultWidth: 96 },
 		{ key: 'notes', label: 'Ghi chú', defaultWidth: 160 }
 	];
 	const placementColumns: SpiritColumn[] = [
@@ -135,6 +137,7 @@
 	let houseId = $state(''),
 		areaId = $state(''),
 		urnStatus = $state<'' | 'yes' | 'no'>(''),
+		tabletStatusFilter = $state<'' | 'pending' | 'enshrined' | 'taken_home'>(''),
 		query = $state(''),
 		total = $state(0),
 		spiritGroupOffset = $state(0),
@@ -212,7 +215,7 @@
 	let spiritHistory = $state<SpiritPositionHistory[]>([]);
 	let spiritHistoryOpen = $state(false);
 	let spiritHistoryName = $state('');
-	let newTabletForm = $state({ name: '', image_url: '', sender: '', notes: '' });
+	let newTabletForm = $state({ name: '', code: '', registered_at: '', enshrined_at: '', entered_worship_area_at: '', status: 'pending' as Tablet['status'], type: 'spirit' as Tablet['type'], image_url: '', sender: '', notes: '' });
 	let selectedHouse = $derived(houses.find((v) => v.id === houseId));
 	let selectedFormTablet = $derived(formTablets.find((tablet) => tablet.id === form.tablet_id));
 	let creatingTablet = $derived(singleSpiritEntry && !form.tablet_id);
@@ -260,9 +263,12 @@
 			return (result || vietnameseCollator.compare(left.full_name, right.full_name)) * direction;
 		});
 	});
+	let filteredSpirits = $derived(
+		tabletStatusFilter ? spirits.filter((item) => item.tablet_status === tabletStatusFilter) : spirits
+	);
 	let tableSpiritGroups = $derived.by(() => {
 		const groups = new Map<string, SpiritTableGroup>();
-		for (const item of spirits) {
+		for (const item of filteredSpirits) {
 			const hasTablet = Boolean(item.tablet_id);
 			const hasPosition = Boolean(item.position_id);
 			const key = hasTablet ? `tablet:${item.tablet_id}` : `unplaced:${item.id}`;
@@ -549,7 +555,7 @@
 		const selectedAreaID = areaId;
 		const selectedUrnStatus = urnStatus;
 		const selectedQuery = query;
-		const page = await listSpirits(selectedQuery, selectedHouseID, selectedAreaID, 25, 0, selectedUrnStatus);
+		const page = await listSpirits(selectedQuery, selectedHouseID, selectedAreaID, 24, 0, selectedUrnStatus);
 		if (
 			requestVersion !== spiritRequestVersion ||
 			selectedHouseID !== houseId ||
@@ -569,7 +575,7 @@
 		if (loadingMore || !hasMore) return;
 		loadingMore = true;
 		try {
-			const page = await listSpirits(query, houseId, areaId, 25, spiritGroupOffset, urnStatus);
+			const page = await listSpirits(query, houseId, areaId, 24, spiritGroupOffset, urnStatus);
 			const known = new Set(spirits.map((item) => item.id));
 			spirits = [...spirits, ...page.spirits.filter((item) => !known.has(item.id))];
 			spiritGroupOffset = page.next_offset;
@@ -725,7 +731,7 @@
 		relatedSpirits = [];
 		relatedSpiritsRequest++;
 		form = emptyForm();
-		newTabletForm = { name: '', image_url: '', sender: '', notes: '' };
+		newTabletForm = { name: '', code: '', registered_at: '', enshrined_at: '', entered_worship_area_at: '', status: 'pending', type: 'spirit', image_url: '', sender: '', notes: '' };
 		newSpirits = [];
 		inlineEditorBusy = false;
 		hasPendingRelatedChanges = false;
@@ -1164,6 +1170,7 @@
 					await updateTablet(selectedFormTablet.id, {
 						position_id: selectedFormTablet.position_id,
 						name: selectedFormTablet.name,
+						code: '', registered_at: form.sent_month.trim() || selectedFormTablet.registered_at, enshrined_at: selectedFormTablet.enshrined_at, entered_worship_area_at: selectedFormTablet.entered_worship_area_at, status: selectedFormTablet.status, type: selectedFormTablet.type,
 						image_url: tabletSavedImage(selectedFormTablet.image_url, relatedSpirits.map((spirit) => spirit.id === editing?.id ? form : spirit)),
 						sender: selectedFormTablet.sender,
 						notes: selectedFormTablet.notes,
@@ -1207,9 +1214,10 @@
 					}
 					await createTablet({
 						position_id: selectedFormPosition.id,
-						name: newTabletForm.name.trim() || newSpirits[0].full_name.trim(),
+						name: newSpirits[0].full_name.trim(),
+						code: '', registered_at: newSpirits.find((spirit) => spirit.sent_month.trim())?.sent_month ?? newTabletForm.registered_at, enshrined_at: newTabletForm.enshrined_at, entered_worship_area_at: newTabletForm.entered_worship_area_at, status: newTabletForm.status, type: newTabletForm.type,
 						image_url: tabletSavedImage(newTabletForm.image_url, newSpirits),
-						sender: newTabletForm.sender,
+						sender: newTabletForm.sender || newSpirits[0]?.sender || '',
 						notes: newTabletForm.notes,
 						spirits: newSpirits
 					});
@@ -1230,6 +1238,7 @@
 				await createTablet({
 					position_id: selectedFormPosition.id,
 					name: rows[0].full_name,
+					registered_at: rows.find((spirit) => spirit.sent_month.trim())?.sent_month ?? '',
 					image_url: tabletSavedImage('', rows),
 					sender: '',
 					notes: '',
@@ -1516,7 +1525,7 @@
 	]}
 >
 	<div class="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 md:px-6 lg:px-8">
-	<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[180px_150px_1fr_auto]">
+	<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[180px_150px_160px_1fr_auto]">
 			<select
 				bind:value={areaId}
 				onchange={() => void changeArea()}
@@ -1531,8 +1540,9 @@
 				onchange={() => void load()}
 				aria-label="Lọc theo Hũ cốt"
 				class="h-11 rounded-md border-[var(--color-border-strong)] text-sm"
-				><option value="">Tất cả Hũ cốt</option><option value="yes">Có Hũ cốt</option><option value="no">Chưa có Hũ cốt</option></select
+			><option value="">Tất cả Hũ cốt</option><option value="yes">Có Hũ cốt</option><option value="no">Chưa có Hũ cốt</option></select
 			>
+			<select bind:value={tabletStatusFilter} aria-label="Lọc theo trạng thái Bài vị" class="h-11 rounded-md border-[var(--color-border-strong)] text-sm"><option value="">Tất cả trạng thái</option><option value="pending">Chờ an vị</option><option value="enshrined">Đã an vị</option><option value="taken_home">Đã thỉnh về</option></select>
 			<label class="relative"
 				><span
 					class="absolute top-3.5 left-3 icon-[lucide--search] h-4 w-4 text-[var(--color-text-muted)]"
@@ -2134,22 +2144,24 @@
 					<p class="mt-1 text-xs leading-relaxed">1. Chọn Nhà Linh và vị trí (có thể để trống). 2. Chọn Bài vị có sẵn hoặc tạo mới tại vị trí đó. 3. Nhập hồ sơ Hương linh và lưu.</p>
 				</div>{/if}
 				{#if relatedTabletId && editing && selectedFormTablet}<div
-						class="shrink-0 overflow-visible pb-4"
+						class="w-full shrink-0 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-muted)]/35 p-3 md:col-span-2"
 					>
 						<SpiritImageUploader
 							imageUrl={tabletDisplayImage(relatedSpirits)}
 							displayName={selectedFormTablet.name}
 							uploading={imageUploading}
 							tablet
+							portraitClass="w-20 text-lg"
 							onselect={selectTabletImage}
 						/>
 						{#if !selectedFormTablet.image_url && relatedSpirits.length === 1 && relatedSpirits[0].image_url}<p class="mt-2 text-xs text-[var(--color-text-secondary)]">Đang dùng mặc định ảnh của Hương linh duy nhất.</p>{:else if relatedSpirits.length > 1}<label class="mt-2 block text-xs text-[var(--color-text-secondary)]">Ảnh đại diện từ Hương linh<select value={selectedFormTablet.image_url} onchange={(event) => { selectedFormTablet.image_url = event.currentTarget.value; markEditingFormChanged(); }} class="mt-1 h-8 w-full rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 text-sm"><option value="">Chưa chọn — dùng ảnh Hương linh tạm thời</option>{#each relatedSpirits.filter((spirit) => spirit.image_url) as spirit (spirit.id)}<option value={spirit.image_url}>{spirit.full_name}</option>{/each}</select></label>{/if}
-					</div>{:else if creatingTablet}<div class="shrink-0 overflow-visible pb-4">
+					</div>{:else if creatingTablet}<div class="w-full shrink-0 overflow-hidden rounded-md border border-[var(--color-border)] bg-[var(--color-surface-muted)]/35 p-3 md:col-span-2">
 						<SpiritImageUploader
 							imageUrl={newTabletForm.image_url || newSpirits.find((spirit) => spirit.image_url)?.image_url || ''}
 							displayName={newTabletForm.name || form.full_name}
 							uploading={imageUploading}
 							tablet
+							portraitClass="w-20 text-lg"
 							onselect={selectNewTabletImage}
 						/>
 						{#if !newTabletForm.image_url && newSpirits.length === 1 && newSpirits[0].image_url}<p class="mt-2 text-xs text-[var(--color-text-secondary)]">Ảnh của Hương linh duy nhất sẽ tự trở thành ảnh Bài vị khi lưu.</p>{:else if newSpirits.length > 1}<label class="mt-2 block text-xs text-[var(--color-text-secondary)]">Ảnh đại diện từ Hương linh<select bind:value={newTabletForm.image_url} class="mt-1 h-8 w-full rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 text-sm"><option value="">Chưa chọn — dùng ảnh Hương linh tạm thời</option>{#each newSpirits.filter((spirit) => spirit.image_url) as spirit (spirit.id)}<option value={spirit.image_url}>{spirit.full_name}</option>{/each}</select></label>{/if}
@@ -2164,7 +2176,7 @@
 							? 'grid content-start gap-4 md:grid-cols-2'
 							: 'contents'}
 					>
-						{#if houses.length > 1 && !editing}<label
+						{#if false && houses.length > 1 && !editing}<label
 								><span class="mb-1 block text-sm font-medium">Nhà Linh *</span><select
 									bind:value={formHouseId}
 									disabled={Boolean(editing) || Boolean(relatedTabletId)}
@@ -2270,14 +2282,11 @@
 								Để trống vị trí để lưu Hương linh vào danh sách chưa xếp.
 							</p>{/if}
 						{#if editing && selectedFormTablet}
-							<label>
-								<span class="mb-1 block text-sm font-medium">Tên Bài vị</span>
-								<input
-									value={selectedFormTablet.name}
-									oninput={(event) => (selectedFormTablet.name = event.currentTarget.value)}
-									class="h-10 w-full rounded-md border-[var(--color-border-strong)] bg-[var(--color-surface)]"
-								/>
-							</label>
+							<div class="grid gap-3 md:col-span-2 md:grid-cols-3"><label>
+								<span class="mb-1 block text-sm font-medium">Mã Bài vị</span>
+								<input value={selectedFormTablet.code} readonly class="h-10 w-full rounded-md border-[var(--color-border-strong)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]" />
+							</label><label><span class="mb-1 block text-sm font-medium">Loại Bài vị</span><select bind:value={selectedFormTablet.type} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="spirit">Hương linh</option><option value="giac_linh">Giác linh</option><option value="family">Gia tiên</option><option value="cuu_huyen">Cửu Huyền Thất Tổ</option><option value="clan">Tộc họ</option><option value="collective">Chư Hương linh</option><option value="fetus">Thai nhi</option><option value="martyr">Anh hùng liệt sĩ</option><option value="victim">Hương linh tử nạn</option><option value="childless">Hương linh vô tự</option><option value="unknown">Hương linh vô danh</option><option value="other">Khác</option></select></label><label><span class="mb-1 block text-sm font-medium">Trạng thái</span><select bind:value={selectedFormTablet.status} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="pending">Chờ an vị</option><option value="enshrined">Đã an vị</option><option value="taken_home">Đã thỉnh về</option></select></label></div>
+							<div class="grid gap-3 md:col-span-2 md:grid-cols-3"><label><span class="mb-1 block text-sm font-medium">Ngày đăng ký</span><input type="text" bind:value={selectedFormTablet.registered_at} placeholder="VD: 00/03/2025" class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label><span class="mb-1 block text-sm font-medium">Ngày an vị</span><input type="date" bind:value={selectedFormTablet.enshrined_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label><span class="mb-1 block text-sm font-medium">Ngày đưa vào khu thờ</span><input type="date" bind:value={selectedFormTablet.entered_worship_area_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
 							<label>
 								<span class="mb-1 block text-sm font-medium">Người gửi</span>
 								<input
@@ -2350,7 +2359,7 @@
 															<span>Năm sinh: {related.birth_year || '—'}</span>
 															<span>Năm mất: {related.death_year || '—'}</span>
 															<span>Tuổi: {related.age || '—'}</span>
-															<span>Tháng gửi: {related.sent_month || '—'}</span>
+															<span>Ngày gửi: {related.sent_month || '—'}</span>
 															<span class="col-span-2">Nơi an táng: {related.burial_place || '—'}</span>
 															{#if related.death_date}<span class="col-span-2">Ngày mất/kỵ: {related.death_date}</span>{/if}
 															{#if related.enshrined_at}<span class="col-span-2">Ngày an vị: {related.enshrined_at}</span>{/if}
@@ -2471,14 +2480,10 @@
 								</section>
 							{/if}
 						{:else if creatingTablet}
-							<label>
-								<span class="mb-1 block text-sm font-medium">Tên Bài vị</span>
-								<input
-									bind:value={newTabletForm.name}
-									placeholder={form.full_name || 'Lấy theo Họ tên Hương linh'}
-									class="h-10 w-full rounded-md border-[var(--color-border-strong)] bg-[var(--color-surface)]"
-								/>
-							</label>
+							<div class="grid gap-3 md:col-span-2 md:grid-cols-3"><label>
+								<span class="mb-1 block text-sm font-medium">Mã Bài vị</span>
+								<input value="Tự động tạo" readonly class="h-10 w-full rounded-md border-[var(--color-border-strong)] bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]" />
+							</label><label><span class="mb-1 block text-sm font-medium">Loại Bài vị</span><select bind:value={newTabletForm.type} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="spirit">Hương linh</option><option value="giac_linh">Giác linh</option><option value="family">Gia tiên</option><option value="cuu_huyen">Cửu Huyền Thất Tổ</option><option value="clan">Tộc họ</option><option value="collective">Chư Hương linh</option><option value="fetus">Thai nhi</option><option value="martyr">Anh hùng liệt sĩ</option><option value="victim">Hương linh tử nạn</option><option value="childless">Hương linh vô tự</option><option value="unknown">Hương linh vô danh</option><option value="other">Khác</option></select></label><label><span class="mb-1 block text-sm font-medium">Trạng thái *</span><select bind:value={newTabletForm.status} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="pending">Chờ an vị</option><option value="enshrined">Đã an vị</option><option value="taken_home">Đã thỉnh về</option></select></label></div><div class="grid gap-3 md:col-span-2 md:grid-cols-3"><label><span class="mb-1 block text-sm font-medium">Ngày đăng ký</span><input bind:value={newTabletForm.registered_at} placeholder="VD: 00/03/2025" class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label><span class="mb-1 block text-sm font-medium">Ngày an vị</span><input type="date" bind:value={newTabletForm.enshrined_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label><span class="mb-1 block text-sm font-medium">Ngày đưa vào khu thờ</span><input type="date" bind:value={newTabletForm.entered_worship_area_at} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
 							<label>
 								<span class="mb-1 block text-sm font-medium">Người gửi</span>
 								<input
@@ -2504,7 +2509,7 @@
 								>
 									<div class="min-w-0">
 										<h3 class="truncate text-sm font-semibold">
-											Hương linh cùng bài vị: {newTabletForm.name || newSpirits[0]?.full_name || 'Bài vị mới'}
+									Hương linh cùng bài vị: {newSpirits[0]?.full_name || 'Bài vị mới'}
 										</h3>
 										<p class="text-xs text-[var(--color-text-secondary)]">
 											Hương linh đầu tiên sẽ được tạo cùng Bài vị này.
@@ -2598,37 +2603,22 @@
 											false,
 											addingRelatedSpirit ? relatedSpiritForm : form
 										)}{@render field(
-											'Tên thường gọi',
-											'familiar_name',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field(
-											'Giới tính',
-											'gender',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field(
-											'Ngày sinh (dương)',
-											'birth_date',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field(
-											'Ngày mất (dương)',
-											'death_date',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field(
-											'Ngày sinh (âm)',
-											'birth_lunar',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field(
-											'Ngày mất (âm)',
-											'death_lunar',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field(
-											'Năm sinh',
+															'Giới tính',
+															'gender',
+															false,
+															addingRelatedSpirit ? relatedSpiritForm : form
+														)}{@render field(
+															'Quê quán',
+															'familiar_name',
+															false,
+															addingRelatedSpirit ? relatedSpiritForm : form
+														)}{@render field(
+															'Ngày mất (dương)',
+															'death_date',
+															false,
+															addingRelatedSpirit ? relatedSpiritForm : form
+														)}{@render field(
+															'Năm sinh',
 											'birth_year',
 											false,
 											addingRelatedSpirit ? relatedSpiritForm : form
@@ -2637,13 +2627,7 @@
 											'death_year',
 											false,
 											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field('Tuổi', 'age', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field(
-											'Tháng gửi',
-											'sent_month',
-											false,
-											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field('Nơi an táng', 'burial_place', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Ngày đưa vào khu thờ', 'entered_worship_area_at', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Ngày an vị', 'enshrined_at', false, addingRelatedSpirit ? relatedSpiritForm : form)}
-										<label><span class={addingRelatedSpirit ? 'mb-1 block text-xs font-medium' : 'mb-1 block text-sm font-medium'}>Tình trạng</span><select value={(addingRelatedSpirit ? relatedSpiritForm : form).status} onchange={(event) => { if (addingRelatedSpirit) relatedSpiritForm.status = event.currentTarget.value; else form.status = event.currentTarget.value; }} class={addingRelatedSpirit ? 'h-9 w-full rounded-md border-[var(--color-border-strong)] text-sm' : 'h-11 w-full rounded-md border-[var(--color-border-strong)]'}><option value="draft">Nháp</option><option value="worshipping">Đang thờ</option><option value="enshrined">Đã an vị</option><option value="moved">Đã chuyển</option><option value="dedicated">Đã hồi hướng</option><option value="archived">Đã lưu trữ</option></select></label>
+										)}{@render field('Tuổi', 'age', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Nơi an táng', 'burial_place', false, addingRelatedSpirit ? relatedSpiritForm : form)}
 										<label class={addingRelatedSpirit ? 'flex h-9 items-center gap-2 rounded-md border border-[var(--color-border-strong)] px-2 text-xs sm:col-span-2 xl:col-span-1' : 'flex h-11 items-center gap-2 rounded-md border border-[var(--color-border-strong)] px-3 text-sm md:col-span-2'}>
 											<input
 												type="checkbox"
@@ -2654,7 +2638,7 @@
 												}}
 												class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]"
 											/>
-											<span>Có Hũ Cốt</span>
+															<span>Lưu tro cốt/hài cốt</span>
 										</label>
 										{#if addingRelatedSpirit || (singleSpiritEntry && creatingTablet)}<div class="flex justify-end md:col-span-2">
 											<button
@@ -2763,20 +2747,22 @@
 			>{:else}{segment.text}{/if}
 	{/each}{/snippet}
 
-{#snippet tabletCardGrid()}<div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 p-1 sm:grid-cols-[repeat(auto-fill,150px)]">
+{#snippet tabletCardGrid()}<div class="grid grid-cols-[repeat(auto-fill,minmax(144px,1fr))] gap-4 p-1 sm:grid-cols-[repeat(auto-fill,144px)]">
 		{#each tableSpiritGroups as group (group.key)}{@const first = group.items[0]}<button
 				type="button"
 				onclick={() => canWrite && void edit(first)}
 				disabled={!canWrite}
-				class="h-[220px] text-left enabled:cursor-pointer disabled:cursor-default"
+				class="h-[211px] text-left enabled:cursor-pointer disabled:cursor-default"
 				title={group.hasTablet ? `Mở Bài vị ${first.tablet_name}` : 'Hương linh chưa xếp Bài vị'}
 			><CardBaiVi
 					code={first.position_name || 'Chưa xếp'}
 					spiritCount={group.items.length}
 					spiritNames={group.items.map((item) => item.full_name)}
 					imageUrl={tabletDisplayImage(group.items)}
+					showDefaultPortrait
 					birthYear={first.birth_year}
 					deathYear={first.death_year}
+					tabletType={first.tablet_type}
 					status={first.status === 'draft' ? 'pending' : 'enshrined'}
 					fontSize={16}
 				/></button>
@@ -2969,7 +2955,8 @@
 							class={['hover:bg-[var(--color-primary-soft)]/40', canWrite && 'cursor-default']}
 						>
 							{#if canWrite && itemIndex === 0}<td rowspan={group.items.length} class="bg-[var(--color-surface-muted)]/35 px-2 py-1 align-middle"
-									><div class="flex justify-center gap-1">
+									><div class="flex flex-col items-center gap-1">
+										{#if group.hasTablet}<span class="max-w-[68px] truncate text-[10px] font-bold text-[var(--color-primary-dark)]" title={item.tablet_code}>{item.tablet_code}</span>{/if}<div class="flex justify-center gap-1">
 										<button
 											type="button"
 											onclick={() => void edit(item)}
@@ -2982,12 +2969,12 @@
 											class="grid h-8 w-8 cursor-pointer place-items-center rounded border border-[var(--color-danger)] text-[var(--color-danger)]"
 											aria-label={group.hasTablet ? `Xóa Bài vị ${item.tablet_name}` : `Xóa ${item.full_name}`}
 											><span class="icon-[lucide--trash-2] h-3.5 w-3.5" aria-hidden="true"></span></button
-										>
+										></div>
 									</div>
 									</td
 								>{/if}
 							{#each tableSpiritColumns as column (column.key)}
-								{#if (column.key === 'position_name' && group.hasPosition) || (group.hasTablet && (column.key === 'tablet_name' || column.key === 'tablet_image_url' || column.key === 'house_name'))}
+								{#if (column.key === 'position_name' && group.hasPosition) || (group.hasTablet && (column.key === 'tablet_name' || column.key === 'tablet_image_url' || column.key === 'tablet_registered_at' || column.key === 'tablet_sender' || column.key === 'house_name'))}
 									{#if itemIndex === 0}<td
 											rowspan={group.items.length}
 											class="bg-[var(--color-surface-muted)]/35 px-3 py-2 align-middle font-medium"
@@ -3003,9 +2990,10 @@
 													spiritCount={group.items.length}
 													spiritNames={group.items.map((spirit) => spirit.full_name)}
 													imageUrl={tabletDisplayImage(group.items)}
-													birthYear={item.birth_year}
-													deathYear={item.death_year}
-													status={item.status === 'draft' ? 'pending' : 'enshrined'}
+																																		birthYear={item.birth_year}
+																																		deathYear={item.death_year}
+																																		tabletType={item.tablet_type}
+																																		status={item.status === 'draft' ? 'pending' : 'enshrined'}
 													fontSize={9}
 													codeScale={1.35}
 												/></button

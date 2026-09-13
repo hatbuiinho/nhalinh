@@ -226,7 +226,7 @@ func (s *PostgresStore) AreaCode(ctx context.Context, id string) (string, error)
 	return code, mapErr(e)
 }
 func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string) ([]Position, error) {
-	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),COALESCE((SELECT array_agg(s2.full_name ORDER BY s2.full_name,s2.id) FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id),ARRAY[]::text[]),COALESCE(array_agg(DISTINCT t.status) FILTER (WHERE t.id IS NOT NULL),ARRAY[]::text[]),COALESCE((SELECT s2.full_name FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),COALESCE((SELECT s2.birth_year FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),COALESCE((SELECT s2.death_year FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
+	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),COALESCE((SELECT array_agg(s2.full_name ORDER BY s2.full_name,s2.id) FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id),ARRAY[]::text[]),COALESCE(array_agg(DISTINCT t.status) FILTER (WHERE t.id IS NOT NULL),ARRAY[]::text[]),COALESCE(array_agg(DISTINCT t.tablet_type) FILTER (WHERE t.id IS NOT NULL),ARRAY[]::text[]),COALESCE((SELECT s2.full_name FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),COALESCE((SELECT s2.birth_year FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),COALESCE((SELECT s2.death_year FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
 	if e != nil {
 		return nil, e
 	}
@@ -234,7 +234,7 @@ func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string)
 	out := []Position{}
 	for rows.Next() {
 		var v Position
-		if e = rows.Scan(&v.ID, &v.AreaID, &v.HouseID, &v.HouseName, &v.AreaCode, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.TabletCount, &v.SpiritCount, &v.SpiritNames, &v.TabletStatuses, &v.SingleSpiritName, &v.SingleSpiritBirthYear, &v.SingleSpiritDeathYear, &v.CreatedAt, &v.UpdatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.AreaID, &v.HouseID, &v.HouseName, &v.AreaCode, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.TabletCount, &v.SpiritCount, &v.SpiritNames, &v.TabletStatuses, &v.TabletTypes, &v.SingleSpiritName, &v.SingleSpiritBirthYear, &v.SingleSpiritDeathYear, &v.CreatedAt, &v.UpdatedAt); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
@@ -358,7 +358,7 @@ func (s *PostgresStore) ListOccupancyPositions(ctx context.Context, _ Actor, hou
 	return positions, unplaced, nil
 }
 func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position string) ([]Tablet, error) {
-	rows, e := s.pool.Query(ctx, `SELECT t.id,t.position_id,h.id,h.name,a.id,a.code,p.name,p.row_number,p.column_number,t.name,t.image_url,t.sender,t.notes,t.status,t.tablet_type,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.position_id=$1 GROUP BY t.id,p.id,a.id,h.id ORDER BY t.name`, position)
+	rows, e := s.pool.Query(ctx, `SELECT t.id,t.position_id,h.id,h.name,a.id,a.code,p.name,p.row_number,p.column_number,t.name,t.code,COALESCE(t.registered_at::text,''),COALESCE(t.enshrined_at::text,''),COALESCE(t.entered_worship_area_at::text,''),t.image_url,t.sender,t.notes,t.status,t.tablet_type,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.position_id=$1 GROUP BY t.id,p.id,a.id,h.id ORDER BY t.code`, position)
 	if e != nil {
 		return nil, e
 	}
@@ -366,7 +366,7 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if e = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Code, &v.RegisteredAt, &v.EnshrinedAt, &v.EnteredWorshipAreaAt, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
@@ -374,7 +374,7 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 	return out, rows.Err()
 }
 func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseID, query string) ([]Tablet, error) {
-	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.image_url,t.sender,t.notes,t.status,t.tablet_type,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.name)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.name`, houseID, query)
+	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.code,COALESCE(t.registered_at::text,''),COALESCE(t.enshrined_at::text,''),COALESCE(t.entered_worship_area_at::text,''),t.image_url,t.sender,t.notes,t.status,t.tablet_type,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.code)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.code`, houseID, query)
 	if err != nil {
 		return nil, err
 	}
@@ -382,7 +382,7 @@ func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseI
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Code, &v.RegisteredAt, &v.EnshrinedAt, &v.EnteredWorshipAreaAt, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -703,7 +703,7 @@ func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, s
 		return Tablet{}, fmt.Errorf("begin create tablet: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,image_url,sender,notes,status,tablet_type,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,house_id,position_id,name,image_url,sender,notes,status,tablet_type,created_at,updated_at`, v.ID, houseID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.Status, v.Type, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,code,registered_at,enshrined_at,entered_worship_area_at,image_url,sender,notes,status,tablet_type,created_at,updated_at) VALUES($1,$2,$3,$4,CASE WHEN $5='' THEN 'BV'||lpad(nextval('memorial_tablet_code_seq')::text,6,'0') ELSE $5 END,$6,NULLIF($7,'')::date,NULLIF($8,'')::date,$9,$10,$11,$12,$13,$14,$15) RETURNING id,house_id,position_id,name,code,COALESCE(registered_at,''),COALESCE(enshrined_at::text,''),COALESCE(entered_worship_area_at::text,''),image_url,sender,notes,status,tablet_type,created_at,updated_at`, v.ID, houseID, v.PositionID, v.Name, v.Code, v.RegisteredAt, v.EnshrinedAt, v.EnteredWorshipAreaAt, v.ImageURL, v.Sender, v.Notes, v.Status, v.Type, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Code, &v.RegisteredAt, &v.EnshrinedAt, &v.EnteredWorshipAreaAt, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
 	if len(existingSpiritIDs) > 0 {
@@ -739,7 +739,7 @@ func (s *PostgresStore) UpdateTabletWithSpirits(ctx context.Context, v Tablet, s
 		return Tablet{}, fmt.Errorf("begin update tablet: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = tx.QueryRow(ctx, `UPDATE memorial_tablets SET position_id=$2,name=$3,image_url=$4,sender=$5,notes=$6,status=$7,tablet_type=$8,updated_at=$9 WHERE id=$1 RETURNING id,position_id,name,image_url,sender,notes,status,tablet_type,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.Status, v.Type, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `UPDATE memorial_tablets SET position_id=$2,name=$3,code=CASE WHEN code='' THEN $4 ELSE code END,registered_at=$5,enshrined_at=NULLIF($6,'')::date,entered_worship_area_at=NULLIF($7,'')::date,image_url=$8,sender=$9,notes=$10,status=$11,tablet_type=$12,updated_at=$13 WHERE id=$1 RETURNING id,position_id,name,code,COALESCE(registered_at,''),COALESCE(enshrined_at::text,''),COALESCE(entered_worship_area_at::text,''),image_url,sender,notes,status,tablet_type,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.Code, v.RegisteredAt, v.EnshrinedAt, v.EnteredWorshipAreaAt, v.ImageURL, v.Sender, v.Notes, v.Status, v.Type, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.Code, &v.RegisteredAt, &v.EnshrinedAt, &v.EnteredWorshipAreaAt, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
 	kept := make([]string, 0, len(spirits))
@@ -803,7 +803,7 @@ func (s *PostgresStore) DeleteTablet(ctx context.Context, id string, deleteSpiri
 	return tx.Commit(ctx)
 }
 
-const spiritCols = `s.id,COALESCE(s.tablet_id,''),h.id,h.name,COALESCE(a.id,''),COALESCE(a.code,''),COALESCE(p.id,''),COALESCE(p.name,''),COALESCE(t.name,''),COALESCE(t.image_url,''),s.full_name,s.dharma_name,s.familiar_name,s.gender,COALESCE(s.birth_date::text,''),COALESCE(s.death_date::text,''),s.birth_lunar,s.death_lunar,s.birth_year,s.death_year,s.status,COALESCE(s.entered_worship_area_at::text,''),COALESCE(s.enshrined_at::text,''),s.age,s.image_url,s.burial_place,s.sender,s.sent_month,s.notes,s.has_urn,s.created_at,s.updated_at`
+const spiritCols = `s.id,COALESCE(s.tablet_id,''),h.id,h.name,COALESCE(a.id,''),COALESCE(a.code,''),COALESCE(p.id,''),COALESCE(p.name,''),COALESCE(t.name,''),COALESCE(t.code,''),COALESCE(t.image_url,''),COALESCE(t.registered_at::text,''),COALESCE(t.sender,''),COALESCE(t.tablet_type,'spirit'),COALESCE(t.status,''),s.full_name,s.dharma_name,s.familiar_name,s.gender,COALESCE(s.birth_date::text,''),COALESCE(s.death_date::text,''),s.birth_lunar,s.death_lunar,s.birth_year,s.death_year,s.status,COALESCE(s.entered_worship_area_at::text,''),COALESCE(s.enshrined_at::text,''),s.age,s.image_url,s.burial_place,s.sender,s.sent_month,s.notes,s.has_urn,s.created_at,s.updated_at`
 
 func (s *PostgresStore) ListSpirits(ctx context.Context, a Actor, o SearchOptions) ([]Spirit, int, error) {
 	access := "($1='admin' OR $3 OR EXISTS(SELECT 1 FROM spirit_house_members hm WHERE hm.house_id=h.id AND hm.user_id=$2))"
@@ -977,7 +977,7 @@ type scanner interface{ Scan(...any) error }
 
 func scanSpirit(r scanner) (Spirit, error) {
 	var v Spirit
-	e := r.Scan(&v.ID, &v.TabletID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionID, &v.PositionName, &v.TabletName, &v.TabletImageURL, &v.FullName, &v.DharmaName, &v.FamiliarName, &v.Gender, &v.BirthDate, &v.DeathDate, &v.BirthLunar, &v.DeathLunar, &v.BirthYear, &v.DeathYear, &v.Status, &v.EnteredWorshipAreaAt, &v.EnshrinedAt, &v.Age, &v.ImageURL, &v.BurialPlace, &v.Sender, &v.SentMonth, &v.Notes, &v.HasUrn, &v.CreatedAt, &v.UpdatedAt)
+	e := r.Scan(&v.ID, &v.TabletID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionID, &v.PositionName, &v.TabletName, &v.TabletCode, &v.TabletImageURL, &v.TabletRegisteredAt, &v.TabletSender, &v.TabletType, &v.TabletStatus, &v.FullName, &v.DharmaName, &v.FamiliarName, &v.Gender, &v.BirthDate, &v.DeathDate, &v.BirthLunar, &v.DeathLunar, &v.BirthYear, &v.DeathYear, &v.Status, &v.EnteredWorshipAreaAt, &v.EnshrinedAt, &v.Age, &v.ImageURL, &v.BurialPlace, &v.Sender, &v.SentMonth, &v.Notes, &v.HasUrn, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
 func mapErr(e error) error {
