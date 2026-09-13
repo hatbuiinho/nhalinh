@@ -3,7 +3,7 @@ import { parseRoute, type AppRoute, type MainRouteName } from './routes';
 const initialRoute: AppRoute = {
 	name: 'memorial',
 	path: '/memorial',
-	title: 'Tra cứu Hương linh'
+	title: 'Hương Linh & Bài Vị'
 };
 
 class AppRouter {

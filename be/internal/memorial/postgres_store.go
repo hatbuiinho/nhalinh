@@ -134,6 +134,17 @@ func (s *PostgresStore) UpdateHouse(ctx context.Context, v House) (House, error)
 	return v, mapErr(e)
 }
 func (s *PostgresStore) DeleteHouse(ctx context.Context, id string) error {
+	var hasRelatedData bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(
+		SELECT 1 FROM memorial_areas WHERE house_id=$1
+		UNION ALL SELECT 1 FROM memorial_tablets WHERE house_id=$1
+		UNION ALL SELECT 1 FROM spirits WHERE house_id=$1 AND deleted_at IS NULL
+	)`, id).Scan(&hasRelatedData); err != nil {
+		return mapErr(err)
+	}
+	if hasRelatedData {
+		return ErrConflict
+	}
 	r, e := s.pool.Exec(ctx, `DELETE FROM spirit_houses WHERE id=$1`, id)
 	if e != nil {
 		return e
@@ -188,13 +199,34 @@ func (s *PostgresStore) CreateArea(ctx context.Context, v Area) (Area, error) {
 	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_areas(id,house_id,code,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,house_id,code,name,notes,created_at,updated_at`, v.ID, v.HouseID, v.Code, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.Code, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
+func (s *PostgresStore) UpdateArea(ctx context.Context, v Area) (Area, error) {
+	e := s.pool.QueryRow(ctx, `UPDATE memorial_areas SET code=$2,name=$3,notes=$4,updated_at=$5 WHERE id=$1 RETURNING id,house_id,code,name,notes,created_at,updated_at`, v.ID, v.Code, v.Name, v.Notes, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.Code, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
+	return v, mapErr(e)
+}
+func (s *PostgresStore) DeleteArea(ctx context.Context, id string) error {
+	var hasPositions bool
+	if err := s.pool.QueryRow(ctx, `SELECT EXISTS(SELECT 1 FROM memorial_positions WHERE area_id=$1)`, id).Scan(&hasPositions); err != nil {
+		return mapErr(err)
+	}
+	if hasPositions {
+		return ErrConflict
+	}
+	r, err := s.pool.Exec(ctx, `DELETE FROM memorial_areas WHERE id=$1`, id)
+	if err != nil {
+		return mapErr(err)
+	}
+	if r.RowsAffected() == 0 {
+		return ErrNotFound
+	}
+	return nil
+}
 func (s *PostgresStore) AreaCode(ctx context.Context, id string) (string, error) {
 	var code string
 	e := s.pool.QueryRow(ctx, `SELECT code FROM memorial_areas WHERE id=$1`, id).Scan(&code)
 	return code, mapErr(e)
 }
 func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string) ([]Position, error) {
-	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),COALESCE((SELECT array_agg(s2.full_name ORDER BY s2.full_name,s2.id) FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id),ARRAY[]::text[]),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
+	rows, e := s.pool.Query(ctx, `SELECT p.id,p.area_id,h.id,h.name,a.code,p.row_number,p.column_number,p.name,p.notes,COUNT(DISTINCT t.id),COUNT(s.id),COALESCE((SELECT array_agg(s2.full_name ORDER BY s2.full_name,s2.id) FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id),ARRAY[]::text[]),COALESCE(array_agg(DISTINCT t.status) FILTER (WHERE t.id IS NOT NULL),ARRAY[]::text[]),COALESCE((SELECT s2.full_name FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),COALESCE((SELECT s2.birth_year FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),COALESCE((SELECT s2.death_year FROM memorial_tablets t2 JOIN spirits s2 ON s2.tablet_id=t2.id AND s2.deleted_at IS NULL WHERE t2.position_id=p.id ORDER BY s2.full_name,s2.id LIMIT 1),''),p.created_at,p.updated_at FROM memorial_positions p JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN memorial_tablets t ON t.position_id=p.id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE p.area_id=$1 GROUP BY p.id,a.id,h.id ORDER BY p.column_number,p.row_number,p.name`, area)
 	if e != nil {
 		return nil, e
 	}
@@ -202,7 +234,7 @@ func (s *PostgresStore) ListPositions(ctx context.Context, a Actor, area string)
 	out := []Position{}
 	for rows.Next() {
 		var v Position
-		if e = rows.Scan(&v.ID, &v.AreaID, &v.HouseID, &v.HouseName, &v.AreaCode, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.TabletCount, &v.SpiritCount, &v.SpiritNames, &v.CreatedAt, &v.UpdatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.AreaID, &v.HouseID, &v.HouseName, &v.AreaCode, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.Notes, &v.TabletCount, &v.SpiritCount, &v.SpiritNames, &v.TabletStatuses, &v.SingleSpiritName, &v.SingleSpiritBirthYear, &v.SingleSpiritDeathYear, &v.CreatedAt, &v.UpdatedAt); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
@@ -272,7 +304,7 @@ func (s *PostgresStore) DeletePosition(ctx context.Context, id string, now time.
 		return err
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if _, err = tx.Exec(ctx, `UPDATE memorial_tablets SET position_id=NULL,updated_at=$2 WHERE position_id=$1`, id, now); err != nil {
+	if _, err = tx.Exec(ctx, `UPDATE memorial_tablets SET position_id=NULL,status='moved',updated_at=$2 WHERE position_id=$1`, id, now); err != nil {
 		return mapErr(err)
 	}
 	r, err := tx.Exec(ctx, `DELETE FROM memorial_positions WHERE id=$1`, id)
@@ -326,7 +358,7 @@ func (s *PostgresStore) ListOccupancyPositions(ctx context.Context, _ Actor, hou
 	return positions, unplaced, nil
 }
 func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position string) ([]Tablet, error) {
-	rows, e := s.pool.Query(ctx, `SELECT t.id,t.position_id,h.id,h.name,a.id,a.code,p.name,p.row_number,p.column_number,t.name,t.image_url,t.sender,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.position_id=$1 GROUP BY t.id,p.id,a.id,h.id ORDER BY t.name`, position)
+	rows, e := s.pool.Query(ctx, `SELECT t.id,t.position_id,h.id,h.name,a.id,a.code,p.name,p.row_number,p.column_number,t.name,t.image_url,t.sender,t.notes,t.status,t.tablet_type,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN memorial_positions p ON p.id=t.position_id JOIN memorial_areas a ON a.id=p.area_id JOIN spirit_houses h ON h.id=a.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.position_id=$1 GROUP BY t.id,p.id,a.id,h.id ORDER BY t.name`, position)
 	if e != nil {
 		return nil, e
 	}
@@ -334,7 +366,7 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if e = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
+		if e = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); e != nil {
 			return nil, e
 		}
 		out = append(out, v)
@@ -342,7 +374,7 @@ func (s *PostgresStore) ListTablets(ctx context.Context, a Actor, position strin
 	return out, rows.Err()
 }
 func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseID, query string) ([]Tablet, error) {
-	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.image_url,t.sender,t.notes,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.name)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.name`, houseID, query)
+	rows, err := s.pool.Query(ctx, `SELECT t.id,COALESCE(t.position_id,''),t.house_id,h.name,''::text,''::text,''::text,0,0,t.name,t.image_url,t.sender,t.notes,t.status,t.tablet_type,COUNT(s.id),t.created_at,t.updated_at FROM memorial_tablets t JOIN spirit_houses h ON h.id=t.house_id LEFT JOIN spirits s ON s.tablet_id=t.id AND s.deleted_at IS NULL WHERE t.house_id=$1 AND t.position_id IS NULL AND ($2='' OR unaccent(lower(t.name)) LIKE '%'||unaccent(lower($2))||'%') GROUP BY t.id,h.id ORDER BY t.name`, houseID, query)
 	if err != nil {
 		return nil, err
 	}
@@ -350,7 +382,7 @@ func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseI
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err = rows.Scan(&v.ID, &v.PositionID, &v.HouseID, &v.HouseName, &v.AreaID, &v.AreaCode, &v.PositionName, &v.RowNumber, &v.ColumnNumber, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.SpiritCount, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -358,7 +390,7 @@ func (s *PostgresStore) ListUnplacedTablets(ctx context.Context, _ Actor, houseI
 	return out, rows.Err()
 }
 func (s *PostgresStore) MoveTablet(ctx context.Context, tabletID, positionID string, now time.Time) error {
-	r, err := s.pool.Exec(ctx, `UPDATE memorial_tablets SET position_id=$2,updated_at=$3 WHERE id=$1`, tabletID, positionID, now)
+	r, err := s.pool.Exec(ctx, `UPDATE memorial_tablets SET position_id=$2,status='enshrined',updated_at=$3 WHERE id=$1`, tabletID, positionID, now)
 	if err != nil {
 		return mapErr(err)
 	}
@@ -612,7 +644,14 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 			positionID := positionsByKey[memorialPositionKey(areasByCode[row.areaCode], row.rowNumber, row.columnNumber)]
 			input.TabletID = tabletsByKey[memorialTabletKey(positionID, row.tabletName)]
 		}
-		spirit := Spirit{HouseID: input.HouseID, TabletID: input.TabletID, FullName: input.FullName, DharmaName: input.DharmaName, BirthYear: input.BirthYear, DeathYear: input.DeathYear, Age: input.Age, ImageURL: input.ImageURL, BurialPlace: input.BurialPlace, Sender: input.Sender, SentMonth: input.SentMonth, Notes: input.Notes, HasUrn: input.HasUrn}
+		status := input.Status
+		if status == "" {
+			status = "draft"
+			if input.TabletID != "" {
+				status = "worshipping"
+			}
+		}
+		spirit := Spirit{HouseID: input.HouseID, TabletID: input.TabletID, FullName: input.FullName, DharmaName: input.DharmaName, FamiliarName: input.FamiliarName, Gender: input.Gender, BirthDate: input.BirthDate, DeathDate: input.DeathDate, BirthLunar: input.BirthLunar, DeathLunar: input.DeathLunar, BirthYear: input.BirthYear, DeathYear: input.DeathYear, Status: status, EnteredWorshipAreaAt: input.EnteredWorshipAreaAt, EnshrinedAt: input.EnshrinedAt, Age: input.Age, ImageURL: input.ImageURL, BurialPlace: input.BurialPlace, Sender: input.Sender, SentMonth: input.SentMonth, Notes: input.Notes, HasUrn: input.HasUrn}
 		spirit.ID, spirit.CreatedAt, spirit.UpdatedAt = newID("spirit"), now, now
 		spirits = append(spirits, spirit)
 	}
@@ -620,9 +659,9 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 	if err != nil {
 		return SpiritImportResult{}, err
 	}
-	if _, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,birth_year,death_year,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
-		SELECT x.id,x.house_id,NULLIF(x.tablet_id,''),x.full_name,x.dharma_name,x.birth_year,x.death_year,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
-		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,tablet_id text,full_name text,dharma_name text,birth_year text,death_year text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)`, string(data)); err != nil {
+	if _, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,familiar_name,gender,birth_date,death_date,birth_lunar,death_lunar,birth_year,death_year,status,entered_worship_area_at,enshrined_at,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
+		SELECT x.id,x.house_id,NULLIF(x.tablet_id,''),x.full_name,x.dharma_name,x.familiar_name,x.gender,NULLIF(x.birth_date,'')::date,NULLIF(x.death_date,'')::date,x.birth_lunar,x.death_lunar,x.birth_year,x.death_year,x.status,NULLIF(x.entered_worship_area_at,'')::date,NULLIF(x.enshrined_at,'')::date,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
+		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,tablet_id text,full_name text,dharma_name text,familiar_name text,gender text,birth_date text,death_date text,birth_lunar text,death_lunar text,birth_year text,death_year text,status text,entered_worship_area_at text,enshrined_at text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)`, string(data)); err != nil {
 		return SpiritImportResult{}, mapErr(err)
 	}
 	if err = tx.Commit(ctx); err != nil {
@@ -632,7 +671,7 @@ func (s *PostgresStore) ImportSpiritsAtomic(ctx context.Context, houseID string,
 	return result, nil
 }
 func (s *PostgresStore) CreateTablet(ctx context.Context, v Tablet) (Tablet, error) {
-	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,image_url,sender,notes,created_at,updated_at) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9) RETURNING id,house_id,position_id,name,image_url,sender,notes,created_at,updated_at`, v.ID, v.HouseID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.CreatedAt, &v.UpdatedAt)
+	e := s.pool.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,image_url,sender,notes,status,created_at,updated_at) VALUES($1,$2,NULLIF($3,''),$4,$5,$6,$7,$8,$9,$10) RETURNING id,house_id,position_id,name,image_url,sender,notes,status,created_at,updated_at`, v.ID, v.HouseID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.Status, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.CreatedAt, &v.UpdatedAt)
 	return v, mapErr(e)
 }
 func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Tablet, error) {
@@ -640,10 +679,10 @@ func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Ta
 	if err != nil {
 		return nil, err
 	}
-	rows, err := s.pool.Query(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at)
-		SELECT x.id,x.house_id,NULLIF(x.position_id,''),x.name,x.notes,x.created_at,x.updated_at
-		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,position_id text,name text,notes text,created_at timestamptz,updated_at timestamptz)
-		ON CONFLICT DO NOTHING RETURNING id,house_id,position_id,name,notes,created_at,updated_at`, string(data))
+	rows, err := s.pool.Query(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,image_url,sender,notes,created_at,updated_at)
+		SELECT x.id,x.house_id,NULLIF(x.position_id,''),x.name,x.image_url,x.sender,x.notes,x.created_at,x.updated_at
+		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,position_id text,name text,image_url text,sender text,notes text,created_at timestamptz,updated_at timestamptz)
+		ON CONFLICT DO NOTHING RETURNING id,house_id,position_id,name,image_url,sender,notes,created_at,updated_at`, string(data))
 	if err != nil {
 		return nil, mapErr(err)
 	}
@@ -651,7 +690,7 @@ func (s *PostgresStore) CreateTablets(ctx context.Context, items []Tablet) ([]Ta
 	out := []Tablet{}
 	for rows.Next() {
 		var v Tablet
-		if err = rows.Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
+		if err = rows.Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
 			return nil, err
 		}
 		out = append(out, v)
@@ -664,11 +703,11 @@ func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, s
 		return Tablet{}, fmt.Errorf("begin create tablet: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,notes,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7) RETURNING id,house_id,position_id,name,notes,created_at,updated_at`, v.ID, houseID, v.PositionID, v.Name, v.Notes, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `INSERT INTO memorial_tablets(id,house_id,position_id,name,image_url,sender,notes,status,tablet_type,created_at,updated_at) VALUES($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11) RETURNING id,house_id,position_id,name,image_url,sender,notes,status,tablet_type,created_at,updated_at`, v.ID, houseID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.Status, v.Type, v.CreatedAt, v.UpdatedAt).Scan(&v.ID, &v.HouseID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
 	if len(existingSpiritIDs) > 0 {
-		result, updateErr := tx.Exec(ctx, `UPDATE spirits SET tablet_id=$1,updated_at=$2 WHERE house_id=$3 AND tablet_id IS NULL AND id=ANY($4::text[])`, v.ID, v.UpdatedAt, houseID, existingSpiritIDs)
+		result, updateErr := tx.Exec(ctx, `UPDATE spirits SET tablet_id=$1,status='enshrined',updated_at=$2 WHERE house_id=$3 AND tablet_id IS NULL AND id=ANY($4::text[])`, v.ID, v.UpdatedAt, houseID, existingSpiritIDs)
 		if updateErr != nil {
 			return Tablet{}, mapErr(updateErr)
 		}
@@ -681,9 +720,9 @@ func (s *PostgresStore) CreateTabletWithSpirits(ctx context.Context, v Tablet, s
 		if marshalErr != nil {
 			return Tablet{}, fmt.Errorf("encode spirits: %w", marshalErr)
 		}
-		_, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,birth_year,death_year,age,image_url,burial_place,sender,sent_month,notes,created_at,updated_at)
-			SELECT x.id,x.house_id,$1,x.full_name,x.dharma_name,x.birth_year,x.death_year,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.created_at,x.updated_at
-			FROM jsonb_to_recordset($2::jsonb) AS x(id text,house_id text,full_name text,dharma_name text,birth_year text,death_year text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,created_at timestamptz,updated_at timestamptz)`, v.ID, string(data))
+		_, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,familiar_name,gender,birth_date,death_date,birth_lunar,death_lunar,birth_year,death_year,status,entered_worship_area_at,enshrined_at,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
+			SELECT x.id,x.house_id,$1,x.full_name,x.dharma_name,x.familiar_name,x.gender,NULLIF(x.birth_date,'')::date,NULLIF(x.death_date,'')::date,x.birth_lunar,x.death_lunar,x.birth_year,x.death_year,x.status,NULLIF(x.entered_worship_area_at,'')::date,NULLIF(x.enshrined_at,'')::date,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
+			FROM jsonb_to_recordset($2::jsonb) AS x(id text,house_id text,full_name text,dharma_name text,familiar_name text,gender text,birth_date text,death_date text,birth_lunar text,death_lunar text,birth_year text,death_year text,status text,entered_worship_area_at text,enshrined_at text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)`, v.ID, string(data))
 		if err != nil {
 			return Tablet{}, mapErr(err)
 		}
@@ -700,7 +739,7 @@ func (s *PostgresStore) UpdateTabletWithSpirits(ctx context.Context, v Tablet, s
 		return Tablet{}, fmt.Errorf("begin update tablet: %w", err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
-	if err = tx.QueryRow(ctx, `UPDATE memorial_tablets SET position_id=$2,name=$3,image_url=$4,sender=$5,notes=$6,updated_at=$7 WHERE id=$1 RETURNING id,position_id,name,image_url,sender,notes,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.CreatedAt, &v.UpdatedAt); err != nil {
+	if err = tx.QueryRow(ctx, `UPDATE memorial_tablets SET position_id=$2,name=$3,image_url=$4,sender=$5,notes=$6,status=$7,tablet_type=$8,updated_at=$9 WHERE id=$1 RETURNING id,position_id,name,image_url,sender,notes,status,tablet_type,created_at,updated_at`, v.ID, v.PositionID, v.Name, v.ImageURL, v.Sender, v.Notes, v.Status, v.Type, v.UpdatedAt).Scan(&v.ID, &v.PositionID, &v.Name, &v.ImageURL, &v.Sender, &v.Notes, &v.Status, &v.Type, &v.CreatedAt, &v.UpdatedAt); err != nil {
 		return Tablet{}, mapErr(err)
 	}
 	kept := make([]string, 0, len(spirits))
@@ -723,10 +762,10 @@ func (s *PostgresStore) UpdateTabletWithSpirits(ctx context.Context, v Tablet, s
 	if err != nil {
 		return Tablet{}, fmt.Errorf("encode spirits: %w", err)
 	}
-	_, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,birth_year,death_year,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
-		SELECT x.id,x.house_id,$1,x.full_name,x.dharma_name,x.birth_year,x.death_year,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
-		FROM jsonb_to_recordset($2::jsonb) AS x(id text,house_id text,full_name text,dharma_name text,birth_year text,death_year text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)
-		ON CONFLICT(id) DO UPDATE SET full_name=EXCLUDED.full_name,dharma_name=EXCLUDED.dharma_name,birth_year=EXCLUDED.birth_year,death_year=EXCLUDED.death_year,age=EXCLUDED.age,image_url=EXCLUDED.image_url,burial_place=EXCLUDED.burial_place,sender=EXCLUDED.sender,sent_month=EXCLUDED.sent_month,notes=EXCLUDED.notes,has_urn=EXCLUDED.has_urn,updated_at=EXCLUDED.updated_at
+	_, err = tx.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,familiar_name,gender,birth_date,death_date,birth_lunar,death_lunar,birth_year,death_year,status,entered_worship_area_at,enshrined_at,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
+		SELECT x.id,x.house_id,$1,x.full_name,x.dharma_name,x.familiar_name,x.gender,NULLIF(x.birth_date,'')::date,NULLIF(x.death_date,'')::date,x.birth_lunar,x.death_lunar,x.birth_year,x.death_year,x.status,NULLIF(x.entered_worship_area_at,'')::date,NULLIF(x.enshrined_at,'')::date,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
+		FROM jsonb_to_recordset($2::jsonb) AS x(id text,house_id text,full_name text,dharma_name text,familiar_name text,gender text,birth_date text,death_date text,birth_lunar text,death_lunar text,birth_year text,death_year text,status text,entered_worship_area_at text,enshrined_at text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)
+		ON CONFLICT(id) DO UPDATE SET full_name=EXCLUDED.full_name,dharma_name=EXCLUDED.dharma_name,birth_year=EXCLUDED.birth_year,death_year=EXCLUDED.death_year,age=EXCLUDED.age,image_url=EXCLUDED.image_url,burial_place=EXCLUDED.burial_place,sender=EXCLUDED.sender,sent_month=EXCLUDED.sent_month,notes=EXCLUDED.notes,updated_at=EXCLUDED.updated_at
 		WHERE spirits.tablet_id=$1`, v.ID, string(data))
 	if err != nil {
 		return Tablet{}, mapErr(err)
@@ -827,9 +866,9 @@ func (s *PostgresStore) CreateSpirits(ctx context.Context, items []Spirit) ([]Sp
 	if err != nil {
 		return nil, err
 	}
-	_, err = s.pool.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,birth_year,death_year,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
-		SELECT x.id,x.house_id,NULLIF(x.tablet_id,''),x.full_name,x.dharma_name,x.birth_year,x.death_year,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
-		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,tablet_id text,full_name text,dharma_name text,birth_year text,death_year text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)`, string(data))
+	_, err = s.pool.Exec(ctx, `INSERT INTO spirits(id,house_id,tablet_id,full_name,dharma_name,familiar_name,gender,birth_date,death_date,birth_lunar,death_lunar,birth_year,death_year,status,entered_worship_area_at,enshrined_at,age,image_url,burial_place,sender,sent_month,notes,has_urn,created_at,updated_at)
+		SELECT x.id,x.house_id,NULLIF(x.tablet_id,''),x.full_name,x.dharma_name,x.familiar_name,x.gender,NULLIF(x.birth_date,'')::date,NULLIF(x.death_date,'')::date,x.birth_lunar,x.death_lunar,x.birth_year,x.death_year,x.status,NULLIF(x.entered_worship_area_at,'')::date,NULLIF(x.enshrined_at,'')::date,x.age,x.image_url,x.burial_place,x.sender,x.sent_month,x.notes,x.has_urn,x.created_at,x.updated_at
+		FROM jsonb_to_recordset($1::jsonb) AS x(id text,house_id text,tablet_id text,full_name text,dharma_name text,familiar_name text,gender text,birth_date text,death_date text,birth_lunar text,death_lunar text,birth_year text,death_year text,status text,entered_worship_area_at text,enshrined_at text,age text,image_url text,burial_place text,sender text,sent_month text,notes text,has_urn boolean,created_at timestamptz,updated_at timestamptz)`, string(data))
 	return items, mapErr(err)
 }
 func (s *PostgresStore) UpdateSpirit(ctx context.Context, v Spirit) (Spirit, error) {

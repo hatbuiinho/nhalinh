@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import { authStore } from '$lib/auth/auth-store.svelte';
 	import { router } from '$lib/navigation/router.svelte';
+	import { popupStore } from '$lib/ui/popup-store.svelte';
 	import { toastStore } from '$lib/ui/toast-store.svelte';
 	import LoadingIndicator from '$lib/ui/LoadingIndicator.svelte';
 	import Popup from '$lib/ui/Popup.svelte';
@@ -9,11 +10,14 @@
 	import UnplacedSpiritPicker from '$lib/memorial/UnplacedSpiritPicker.svelte';
 	import InlinePositionEditor from '$lib/memorial/InlinePositionEditor.svelte';
 	import PositionMap from '$lib/memorial/PositionMap.svelte';
+	import SpiritPortrait from '$lib/memorial/SpiritPortrait.svelte';
 	import { memorialRevisionStore } from '$lib/memorial/memorial-revision-store.svelte';
 	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 	import {
 		createArea,
 		createHouse,
+		deleteArea,
+		deleteHouse,
 		createPositions,
 		createTablet,
 		deletePosition,
@@ -27,6 +31,8 @@
 		moveTablet,
 		searchPositions,
 		updatePosition,
+		updateArea,
+		updateHouse,
 		updateTablet,
 		type EditableSpiritInput,
 		type Area,
@@ -87,7 +93,12 @@
 		moveTabletOpen = $state(false),
 		movePositionQuery = $state(''),
 		movePositionResults = $state<Position[]>([]),
+		houseManagerOpen = $state(false),
+		areaManagerOpen = $state(false),
+		formSnapshot = $state(''),
 		mode = $state<Mode>('');
+	let editingHouse = $state<House | null>(null);
+	let editingArea = $state<Area | null>(null);
 	let editingPosition = $state<Position | null>(null);
 	let newPositions = $state<EditablePositionRow[]>([emptyPositionRow()]);
 	let drawerPosition = $state<Position | null>(null);
@@ -107,9 +118,9 @@
 			column_number: number;
 			notes: string;
 		}>({ row_number: 1, column_number: 1, notes: '' }),
-		tabletForm = $state<{ name: string; image_url: string; sender: string; notes: string; spirits: EditableSpiritInput[] }>({
+		tabletForm = $state<{ name: string; image_url: string; sender: string; notes: string; status: Tablet['status']; type: Tablet['type']; spirits: EditableSpiritInput[] }>({
 			name: '',
-			image_url: '', sender: '', notes: '',
+			image_url: '', sender: '', notes: '', status: 'enshrined', type: 'spirit',
 			spirits: [emptyInlineSpirit()]
 		});
 	let house = $derived(houses.find((v) => v.id === houseId));
@@ -371,9 +382,55 @@
 	async function openPositionAtEmptyCoordinate(rowNumber: number, columnNumber: number) {
 		await open('position');
 		newPositions = [{ row_number: String(rowNumber), column_number: String(columnNumber), notes: '' }];
+		captureFormSnapshot();
 	}
+	async function fillEmptyCoordinates(maxRow: number, maxColumn: number) {
+		if (!areaId) return;
+		const occupied = new Set(positions.map((position) => `${position.row_number}:${position.column_number}`));
+		const missing: Array<{ row_number: number; column_number: number; notes: string }> = [];
+		for (let row = 1; row <= maxRow; row += 1) {
+			for (let column = 1; column <= maxColumn; column += 1) {
+				if (!occupied.has(`${row}:${column}`)) missing.push({ row_number: row, column_number: column, notes: '' });
+			}
+		}
+		if (missing.length === 0) {
+			toastStore.success('Tất cả tọa độ trong sơ đồ đã có mã vị trí');
+			return;
+		}
+		const confirmed = await popupStore.confirm({
+			title: `Tạo ${missing.length} mã vị trí?`,
+			message: `Các tọa độ trống trong phạm vi cột 1–${maxColumn}, hàng 1–${maxRow} sẽ được tạo thành Vị trí thật.`,
+			confirmLabel: 'Tạo mã vị trí',
+			cancelLabel: 'Hủy'
+		});
+		if (!confirmed) return;
+		saving = true;
+		try {
+			await createPositions(areaId, missing);
+			await selectArea();
+			memorialRevisionStore.invalidate();
+			toastStore.success(`Đã tạo ${missing.length} mã vị trí`);
+		} catch (error) {
+			toastStore.error(msg(error));
+		} finally {
+			saving = false;
+		}
+	}
+	function currentFormState() {
+		switch (mode) {
+			case 'house': return { houseForm };
+			case 'area': return { areaForm };
+			case 'position': return editingPosition ? { positionForm } : { newPositions };
+			case 'tablet': return { tabletForm, selectedUnplacedSpiritIDs: selectedUnplacedSpirits.map((spirit) => spirit.id) };
+			default: return {};
+		}
+	}
+	function captureFormSnapshot() { formSnapshot = JSON.stringify(currentFormState()); }
+	function hasUnsavedFormChanges() { return formSnapshot !== JSON.stringify(currentFormState()); }
 	async function open(next: Mode) {
 		mode = next;
+		if (next !== 'house') editingHouse = null;
+		if (next !== 'area') editingArea = null;
 		if (next !== 'position') editingPosition = null;
 		if (next !== 'tablet') editingTablet = null;
 		if (next === 'house') houseForm = { name: '', address: '', notes: '' };
@@ -390,8 +447,9 @@
 		if (next === 'tablet') {
 			editingTablet = null;
 			selectedUnplacedSpirits = [];
-			tabletForm = { name: '', image_url: '', sender: '', notes: '', spirits: [emptyInlineSpirit()] };
+			tabletForm = { name: '', image_url: '', sender: '', notes: '', status: 'enshrined', type: 'spirit', spirits: [emptyInlineSpirit()] };
 		}
+		captureFormSnapshot();
 	}
 	function editPosition(position: Position) {
 		positionId = position.id;
@@ -402,6 +460,7 @@
 			notes: position.notes
 		};
 		mode = 'position';
+		captureFormSnapshot();
 	}
 	async function editTablet(tablet: Tablet) {
 		try {
@@ -411,7 +470,7 @@
 			selectedUnplacedSpirits = [];
 			tabletForm = {
 				name: tablet.name,
-				image_url: tablet.image_url, sender: tablet.sender, notes: tablet.notes,
+				image_url: tablet.image_url, sender: tablet.sender, notes: tablet.notes, status: tablet.status, type: tablet.type,
 				spirits: items.map((spirit) => ({
 					id: spirit.id,
 					full_name: spirit.full_name,
@@ -427,6 +486,7 @@
 				}))
 			};
 			mode = 'tablet';
+			captureFormSnapshot();
 		} catch (e) {
 			toastStore.error(msg(e));
 		}
@@ -438,12 +498,16 @@
 		try {
 			let successMessage = 'Đã lưu dữ liệu';
 			if (mode === 'house') {
-				const v = await createHouse(houseForm);
+				const v = editingHouse
+					? await updateHouse(editingHouse.id, { ...houseForm, active: editingHouse.active })
+					: await createHouse(houseForm);
 				houses = await listHouses();
 				houseId = v.id;
 				await selectHouse();
 			} else if (mode === 'area') {
-				const v = await createArea({ house_id: houseId, ...areaForm });
+				const v = editingArea
+					? await updateArea(editingArea.id, areaForm)
+					: await createArea({ house_id: houseId, ...areaForm });
 				areas = await listAreas(houseId);
 				areaId = v.id;
 				await selectArea();
@@ -485,10 +549,11 @@
 				const spirits = tabletForm.spirits.filter((row) =>
 					Object.values(row).some((value) => value.trim())
 				);
+				const tabletImage = tabletForm.image_url || (spirits.length === 1 ? spirits[0].image_url : '');
 				const payload = {
 					position_id: targetPositionID,
 					name: tabletForm.name,
-					image_url: tabletForm.image_url, sender: tabletForm.sender, notes: tabletForm.notes,
+					image_url: tabletImage, sender: tabletForm.sender, notes: tabletForm.notes, status: tabletForm.status, type: tabletForm.type,
 					spirits
 				};
 				if (editingTablet) await updateTablet(editingTablet.id, payload);
@@ -579,11 +644,50 @@
 		if (event.key !== 'Escape') return;
 		if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
 		if (mode) {
-			if (!saving && !inlineEditorBusy) mode = '';
+			if (!saving && !inlineEditorBusy) void requestCloseMode();
 			return;
 		}
 		if (drawerOpen) drawerOpen = false;
 		else if (positionFullscreen) positionFullscreen = false;
+	}
+	function tabletTypeLabel(type: Tablet['type']) {
+		return type === 'ancestral' ? 'Cửu Huyền Thất Tổ' : type === 'family' ? 'Gia tiên' : 'Hương linh';
+	}
+	function tabletStatusLabel(status: Tablet['status']) {
+		return status === 'pending' ? 'Chưa an vị' : status === 'enshrined' ? 'Đã an vị' : status === 'moving' ? 'Đang di dời' : status === 'moved' ? 'Đã di dời / lưu kho' : 'Lưu trữ';
+	}
+	function editHouse(item: House) {
+		editingHouse = item; houseForm = { name: item.name, address: item.address, notes: item.notes }; houseManagerOpen = false; mode = 'house'; captureFormSnapshot();
+	}
+	function editArea(item: Area) {
+		editingArea = item; areaForm = { code: item.code, name: item.name, notes: item.notes }; areaManagerOpen = false; mode = 'area'; captureFormSnapshot();
+	}
+	async function removeHouse(item: House) {
+		if (!await popupStore.confirm({ title: 'Xóa Nhà Linh?', message: `Nhà Linh ${item.name} chỉ có thể xóa khi không còn Khu vực, Bài vị hay Hương linh liên quan.`, confirmLabel: 'Xóa', cancelLabel: 'Hủy', tone: 'danger' })) return;
+		try { await deleteHouse(item.id); houses = await listHouses(); houseId = houses[0]?.id ?? ''; await selectHouse(); toastStore.success('Đã xóa Nhà Linh'); } catch (e) { toastStore.error(msg(e)); }
+	}
+	async function removeArea(item: Area) {
+		if (!await popupStore.confirm({ title: 'Xóa Khu vực?', message: `Khu ${item.code} chỉ có thể xóa khi không còn Vị trí.`, confirmLabel: 'Xóa', cancelLabel: 'Hủy', tone: 'danger' })) return;
+		try { await deleteArea(item.id); areas = await listAreas(houseId); areaId = areas[0]?.id ?? ''; await selectArea(); toastStore.success('Đã xóa Khu vực'); } catch (e) { toastStore.error(msg(e)); }
+	}
+	async function requestCloseMode() {
+		if (!mode || saving || inlineEditorBusy) return;
+		if (mode === 'tablet' && editingTablet && !canWrite) {
+			mode = '';
+			return;
+		}
+		if (!hasUnsavedFormChanges()) {
+			mode = '';
+			return;
+		}
+		const confirmed = await popupStore.confirm({
+			title: 'Bỏ thay đổi chưa lưu?',
+			message: 'Các thông tin đang nhập sẽ không được lưu.',
+			confirmLabel: 'Bỏ thay đổi',
+			cancelLabel: 'Tiếp tục nhập',
+			tone: 'danger'
+		});
+		if (confirmed) mode = '';
 	}
 </script>
 
@@ -594,17 +698,8 @@
 >
 	<div class="mx-auto w-full max-w-[1320px] lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
 		<div class="mb-5 flex shrink-0 flex-wrap gap-2">
-			{#if authStore.user?.role === 'admin'}<button
-					type="button"
-					onclick={() => void open('house')}
-					class="h-11 rounded-md bg-[var(--color-primary)] px-4 text-sm font-semibold text-white"
-					>Thêm Nhà Linh</button
-				>{/if}{#if canWrite && houseId}<button
-					type="button"
-					onclick={() => void open('area')}
-					class="h-11 rounded-md border border-[var(--color-primary)] px-4 text-sm font-semibold text-[var(--color-primary-dark)]"
-					>Thêm khu vực</button
-				>{/if}
+			{#if authStore.user?.role === 'admin'}<button type="button" onclick={() => (houseManagerOpen = true)} class="h-11 rounded-md bg-[var(--color-primary)] px-4 text-sm font-semibold text-white shadow-sm"><span class="mr-1.5 icon-[lucide--building-2] inline-block h-4 w-4 align-text-bottom"></span>Quản lý Nhà Linh</button>{/if}
+			{#if canWrite && houseId}<button type="button" onclick={() => (areaManagerOpen = true)} class="h-11 rounded-md border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-4 text-sm font-semibold text-[var(--color-primary-dark)]"><span class="mr-1.5 icon-[lucide--map] inline-block h-4 w-4 align-text-bottom"></span>Quản lý Khu vực</button>{/if}
 		</div>
 		{#if loading}<div class="py-16">
 				<LoadingIndicator label="Đang tải cơ cấu tổ chức..." />
@@ -732,6 +827,7 @@
 								? ({ rowNumber, columnNumber }) =>
 									void openPositionAtEmptyCoordinate(rowNumber, columnNumber)
 								: undefined}
+							onfillcoordinates={canWrite ? (bounds) => void fillEmptyCoordinates(bounds.maxRow, bounds.maxColumn) : undefined}
 						/>
 					{:else}<div
 							class={[
@@ -822,6 +918,26 @@
 	</div>
 </section>
 
+<Popup open={houseManagerOpen} title="Danh sách Nhà Linh" onClose={() => (houseManagerOpen = false)}>
+	<div class="space-y-3">
+		<div class="flex justify-end"><button type="button" onclick={() => { houseManagerOpen = false; void open('house'); }} class="h-10 rounded-md bg-[var(--color-primary)] px-3 text-sm font-semibold text-white"><span class="mr-1 icon-[lucide--plus] inline-block h-4 w-4 align-text-bottom"></span>Thêm Nhà Linh</button></div>
+		<div class="space-y-2">
+		{#each houses as item (item.id)}<div class="flex items-center gap-3 rounded-md border border-[var(--color-border)] p-3"><div class="min-w-0 flex-1"><p class="truncate font-semibold">{item.name}</p><p class="mt-0.5 truncate text-xs text-[var(--color-text-secondary)]">{item.address || 'Chưa có địa chỉ'} · {item.active ? 'Đang sử dụng' : 'Ngừng sử dụng'}</p></div><button type="button" onclick={() => editHouse(item)} class="h-8 rounded-md border px-2 text-xs font-semibold">Sửa</button><button type="button" onclick={() => void removeHouse(item)} class="h-8 rounded-md border border-[var(--color-danger)] px-2 text-xs font-semibold text-[var(--color-danger)]">Xóa</button></div>{:else}<p class="py-8 text-center text-sm text-[var(--color-text-secondary)]">Chưa có Nhà Linh.</p>{/each}
+		</div>
+	</div>
+	{#snippet footer()}<button type="button" onclick={() => (houseManagerOpen = false)} class="ml-auto h-10 rounded-md border px-5 font-semibold">Đóng</button>{/snippet}
+</Popup>
+
+<Popup open={areaManagerOpen} title="Danh sách Khu vực" onClose={() => (areaManagerOpen = false)}>
+	<div class="space-y-3">
+		<div class="flex justify-end"><button type="button" onclick={() => { areaManagerOpen = false; void open('area'); }} class="h-10 rounded-md bg-[var(--color-primary)] px-3 text-sm font-semibold text-white"><span class="mr-1 icon-[lucide--plus] inline-block h-4 w-4 align-text-bottom"></span>Thêm Khu vực</button></div>
+		<div class="space-y-2">
+		{#each areas as item (item.id)}<div class="flex items-center gap-3 rounded-md border border-[var(--color-border)] p-3"><div class="min-w-0 flex-1"><p class="truncate font-semibold">Khu {item.code}{item.name ? ` · ${item.name}` : ''}</p><p class="mt-0.5 text-xs text-[var(--color-text-secondary)]">{item.position_count} vị trí · {item.tablet_count} Bài vị · {item.spirit_count} Hương linh</p></div><button type="button" onclick={() => editArea(item)} class="h-8 rounded-md border px-2 text-xs font-semibold">Sửa</button><button type="button" disabled={item.position_count > 0} title={item.position_count > 0 ? 'Cần xóa hết vị trí trước' : 'Xóa khu vực'} onclick={() => void removeArea(item)} class="h-8 rounded-md border border-[var(--color-danger)] px-2 text-xs font-semibold text-[var(--color-danger)] disabled:opacity-40">Xóa</button></div>{:else}<p class="py-8 text-center text-sm text-[var(--color-text-secondary)]">Chưa có Khu vực.</p>{/each}
+		</div>
+	</div>
+	{#snippet footer()}<button type="button" onclick={() => (areaManagerOpen = false)} class="ml-auto h-10 rounded-md border px-5 font-semibold">Đóng</button>{/snippet}
+</Popup>
+
 {#if drawerOpen}<div
 		class="fixed inset-0 z-40 bg-black/35"
 		role="presentation"
@@ -896,16 +1012,11 @@
 					>
 						Chưa có bài vị tại vị trí này
 					</div>{:else}<div class="space-y-3">
-					{#each tablets as tablet (tablet.id)}<div class="rounded-md border border-[var(--color-border)] bg-[var(--color-surface)] p-4">
-							<button type="button" onclick={() => void editTablet(tablet)} title={canWrite ? 'Sửa bài vị và Hương linh' : 'Xem danh sách Hương linh'} class="w-full cursor-pointer text-left">
-								<h3 class="truncate font-semibold">{tablet.name}</h3>
-								<p class="mt-1 text-xs text-[var(--color-text-secondary)]">
-									{tablet.spirit_count} Hương linh
-								</p>
-								{#if tabletSpiritPreviews.get(tablet.id)?.length}<div class="mt-2 space-y-0.5 text-sm text-[var(--color-text-secondary)]">{#each tabletSpiritPreviews.get(tablet.id) ?? [] as spirit (spirit.id)}<p>{spirit.full_name}</p>{/each}</div>{/if}
-							</button>
-							{#if canWrite}<div class="mt-3 flex justify-end gap-4"><button type="button" onclick={() => openTabletMove(tablet)} class="text-xs font-semibold text-[var(--color-primary-dark)]">Chuyển vị trí</button><button type="button" onclick={() => openTabletDelete(tablet)} class="text-xs font-semibold text-[var(--color-danger)]">Xoá bài vị</button></div>{/if}
-						</div>{/each}
+					{#each tablets as tablet (tablet.id)}<article class="rounded-md border border-[#d8c39c] bg-[#fffdf8] p-4 shadow-sm">
+							<header class="flex items-start justify-between gap-3 border-b border-[#eadfc9] pb-3"><div><p class="text-xs font-semibold text-[#80673c]">{selectedPosition?.name}</p><h3 class="mt-1 font-semibold text-[#382c22]">{tablet.name}</h3></div><div class="space-y-1 text-right"><span class="block rounded-sm bg-[#f4e5be] px-1.5 py-0.5 text-[10px] font-semibold text-[#604820]">{tabletTypeLabel(tablet.type)}</span><span class="block text-xs font-semibold text-[#406b5b]">{tabletStatusLabel(tablet.status)}</span></div></header>
+							<section class="pt-3"><p class="mb-2 text-xs font-semibold text-[#80673c]">Danh sách Hương linh</p><div class="space-y-3">{#each tabletSpiritPreviews.get(tablet.id) ?? [] as spirit (spirit.id)}<div class="flex gap-3"><SpiritPortrait imageUrl={spirit.image_url} alt={spirit.full_name} sizeClass="h-16 w-12 shrink-0" /><div class="min-w-0 flex-1"><p class="font-semibold text-[#382c22]">{spirit.full_name}</p>{#if spirit.dharma_name}<p class="text-sm text-[var(--color-text-secondary)]">Pháp danh: {spirit.dharma_name}</p>{/if}{#if spirit.birth_year || spirit.death_year}<p class="text-sm text-[var(--color-text-secondary)]">{spirit.birth_year || '?'} – {spirit.death_year || '?'}</p>{/if}<details class="mt-1 text-xs text-[var(--color-text-secondary)]"><summary class="cursor-pointer font-semibold text-[var(--color-primary-dark)]">Thông tin thêm</summary><div class="mt-1 space-y-0.5"><p>{spirit.death_date ? `Ngày mất/kỵ: ${spirit.death_date}` : ''}</p><p>{spirit.enshrined_at ? `Ngày an vị: ${spirit.enshrined_at}` : ''}</p><p>{spirit.notes ? `Ghi chú: ${spirit.notes}` : ''}</p></div></details></div></div>{/each}</div></section>
+							{#if canWrite}<footer class="mt-4 flex flex-wrap justify-end gap-2 border-t border-[#eadfc9] pt-3"><button type="button" onclick={() => void editTablet(tablet)} class="h-9 rounded-md border border-[var(--color-border-strong)] px-3 text-xs font-semibold">Sửa Bài vị</button><button type="button" onclick={() => openTabletMove(tablet)} class="h-9 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]">Chuyển vị trí</button><button type="button" onclick={() => openTabletDelete(tablet)} class="h-9 rounded-md border border-[var(--color-danger)] px-3 text-xs font-semibold text-[var(--color-danger)]">Xoá</button></footer>{/if}
+						</article>{/each}
 					</div>{/if}
 			</div>
 		</aside>
@@ -914,8 +1025,8 @@
 {#if mode}<div
 		class="fixed inset-0 z-50 grid place-items-end bg-black/40 md:place-items-center"
 		role="presentation"
-		onclick={(e) => {
-			if (e.target === e.currentTarget) mode = '';
+	onclick={(e) => {
+			if (e.target === e.currentTarget) void requestCloseMode();
 		}}
 	>
 		<form
@@ -934,9 +1045,9 @@
 		>
 			<h2 class="mb-4 shrink-0 text-lg font-semibold">
 				{mode === 'house'
-					? 'Thêm Nhà Linh'
+					? editingHouse ? 'Sửa Nhà Linh' : 'Thêm Nhà Linh'
 					: mode === 'area'
-						? 'Thêm khu vực'
+						? editingArea ? 'Sửa khu vực' : 'Thêm khu vực'
 						: mode === 'position'
 							? editingPosition
 								? 'Sửa vị trí'
@@ -1014,7 +1125,8 @@
 								/></label
 							>
 						</div>
-						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Ảnh Bài vị (URL)</span><input bind:value={tabletForm.image_url} readonly={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label><label class="block"><span class="mb-1 block text-sm">Người gửi</span><input bind:value={tabletForm.sender} readonly={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
+						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Ảnh Bài vị (URL)</span><input bind:value={tabletForm.image_url} readonly={!canWrite} placeholder="Tự lấy ảnh Hương linh khi chỉ có một người" class="h-10 w-full rounded-md border-[var(--color-border-strong)]" />{#if !tabletForm.image_url && tabletForm.spirits.length === 1 && tabletForm.spirits[0].image_url}<span class="mt-1 block text-xs text-[var(--color-text-secondary)]">Đang dùng mặc định ảnh của Hương linh.</span>{:else if !tabletForm.image_url && tabletForm.spirits.length > 1}<span class="mt-1 block text-xs text-[var(--color-text-secondary)]">Nhiều Hương linh: hãy chọn hoặc tải ảnh Bài vị; khi chưa chọn sẽ dùng ảnh Hương linh có sẵn để hiển thị.</span>{/if}</label><label class="block"><span class="mb-1 block text-sm">Người gửi</span><input bind:value={tabletForm.sender} readonly={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]" /></label></div>
+						<div class="grid gap-3 md:grid-cols-2"><label class="block"><span class="mb-1 block text-sm">Loại Bài vị</span><select bind:value={tabletForm.type} disabled={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="spirit">Hương linh</option><option value="ancestral">Cửu Huyền Thất Tổ</option><option value="family">Gia tiên</option></select></label><label class="block"><span class="mb-1 block text-sm">Trạng thái Bài vị</span><select bind:value={tabletForm.status} disabled={!canWrite} class="h-10 w-full rounded-md border-[var(--color-border-strong)]"><option value="pending">Chưa an vị</option><option value="enshrined">Đã an vị</option><option value="moving">Đang di dời</option><option value="moved">Đã di dời / lưu kho</option><option value="archived">Lưu trữ</option></select></label></div>
 						{@render textarea('Ghi chú', tabletForm)}
 						{#if !editingTablet}<UnplacedSpiritPicker
 								houseId={selectedPosition?.house_id ?? houseId}
@@ -1045,7 +1157,7 @@
 					>Xoá vị trí</button
 				>{/if}<button
 					type="button"
-					onclick={() => (mode = '')}
+					onclick={() => void requestCloseMode()}
 					class="h-11 rounded-md border px-5 text-sm font-semibold"
 					>{mode === 'tablet' && editingTablet && !canWrite ? 'Đóng' : 'Huỷ'}</button
 				>{#if !(mode === 'tablet' && editingTablet && !canWrite)}<button
@@ -1063,7 +1175,7 @@
 		<p class="text-sm text-[var(--color-text-secondary)]">{assignmentTarget ? 'Chọn Bài vị để gán vào Vị trí này.' : 'Các Bài vị này đang được giữ lại nhưng chưa thuộc Vị trí nào.'}</p>
 		<label class="relative block"><span class="absolute top-3 left-3 icon-[lucide--search] h-4 w-4 text-[var(--color-text-muted)]"></span><input bind:value={unplacedTabletQuery} placeholder="Tìm tên Bài vị..." class="h-10 w-full rounded-md border-[var(--color-border-strong)] pl-9 text-sm" /></label>
 		<div class="max-h-[50dvh] space-y-2 overflow-y-auto pr-1">
-			{#each filteredUnplacedTablets as tablet (tablet.id)}<div class="flex items-center gap-3 rounded-md border border-[var(--color-border)] p-3"><div class="min-w-0 flex-1"><p class="truncate font-semibold">{tablet.name}</p><p class="mt-0.5 text-xs text-[var(--color-text-secondary)]">{tablet.spirit_count} Hương linh</p></div>{#if assignmentTarget}<button type="button" disabled={saving} onclick={() => void assignUnplacedTablet(tablet)} class="h-9 shrink-0 rounded-md bg-[var(--color-primary)] px-3 text-xs font-semibold text-white disabled:opacity-50">Thêm</button>{/if}</div>{:else}<p class="py-8 text-center text-sm text-[var(--color-text-secondary)]">Không có Bài vị chưa xếp phù hợp.</p>{/each}
+			{#each filteredUnplacedTablets as tablet (tablet.id)}<div class="flex items-center gap-3 rounded-md border border-[var(--color-border)] p-3"><div class="min-w-0 flex-1"><p class="truncate font-semibold">{tablet.name}</p><p class="mt-0.5 text-xs text-[var(--color-text-secondary)]">{tablet.spirit_count} Hương linh</p></div>{#if assignmentTarget}<button type="button" disabled={saving} onclick={() => void assignUnplacedTablet(tablet)} class="h-9 shrink-0 rounded-md bg-[var(--color-primary)] px-3 text-xs font-semibold text-white disabled:opacity-50">Gán vào vị trí này</button>{/if}</div>{:else}<p class="py-8 text-center text-sm text-[var(--color-text-secondary)]">Không có Bài vị chưa xếp phù hợp.</p>{/each}
 		</div>
 	</div>
 	{#snippet footer()}<button type="button" onclick={() => (unplacedTabletsOpen = false)} class="ml-auto h-10 rounded-md border border-[var(--color-border-strong)] px-5 font-semibold">Đóng</button>{/snippet}

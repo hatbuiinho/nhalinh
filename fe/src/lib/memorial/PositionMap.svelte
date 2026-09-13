@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { tick } from 'svelte';
 	import { tooltip } from '$lib/actions/tooltip';
+	import CardBaiVi from './CardBaiVi.svelte';
 	import type { Position } from './api';
 
 	let {
@@ -8,26 +9,31 @@
 		areaCode,
 		fullscreen = false,
 		onposition,
-		onemptyposition
+		onemptyposition,
+		onfillcoordinates
 	}: {
 		positions: Position[];
 		areaCode: string;
 		fullscreen?: boolean;
 		onposition: (position: Position) => void;
 		onemptyposition?: (coordinate: { rowNumber: number; columnNumber: number }) => void;
+		onfillcoordinates?: (bounds: { maxRow: number; maxColumn: number }) => void;
 	} = $props();
 
 	type HeatLevel = 'empty' | 'low' | 'medium' | 'high' | 'very-high';
 	type HeatFilter = 'all' | HeatLevel;
+	type TabletStatus = 'pending' | 'enshrined' | 'moving' | 'moved' | 'archived';
+	type TabletStatusFilter = 'all' | TabletStatus;
 
 	const minZoom = 0.2;
 	const maxZoom = 1.0;
 	const zoomStep = 0.05;
 	const baseLabelWidth = 56;
-	const baseCellWidth = 200;
+	const baseCellWidth = 70;
 
 	let heatFilter = $state<HeatFilter>('all');
-	let zoom = $state(0.5);
+	let tabletStatusFilter = $state<TabletStatusFilter>('all');
+	let zoom = $state(1);
 	let viewport = $state<HTMLDivElement | null>(null);
 	let panning = $state(false);
 	let panPointerId = $state<number | null>(null);
@@ -50,11 +56,11 @@
 	);
 	let labelWidth = $derived(Math.max(42, Math.round(baseLabelWidth * zoom)));
 	let cellWidth = $derived(Math.round(baseCellWidth * zoom));
-	let cellHeight = $derived(Math.round((cellWidth * 3) / 4));
-	let gridGap = $derived(Math.max(2, Math.round(8 * zoom)));
+	let cellHeight = $derived(Math.round(100 * zoom));
+	let gridGap = $derived(Math.max(3, Math.round(12 * zoom)));
 	let headerHeight = $derived(Math.max(28, Math.round(40 * zoom)));
 	let cellPadding = $derived(Math.max(6, Math.round(12 * zoom)));
-	let cellRadius = $derived(Math.max(8, Math.round(12 * zoom)));
+	let cellRadius = $derived(Math.max(3, Math.round(6 * zoom)));
 	let axisPadding = $derived(Math.max(8, Math.round(8 * zoom)));
 	let titleFontSize = $derived(Math.max(9, Math.round(14 * zoom)));
 	let metricFontSize = $derived(Math.max(8, Math.round(12 * zoom)));
@@ -98,7 +104,41 @@
 	}
 
 	function matches(position: Position) {
-		return heatFilter === 'all' || heatLevel(position) === heatFilter;
+		const matchesHeat = heatFilter === 'all' || heatLevel(position) === heatFilter;
+		const matchesStatus =
+			tabletStatusFilter === 'all' || position.tablet_statuses.includes(tabletStatusFilter);
+		return matchesHeat && matchesStatus;
+	}
+
+	function tabletStatusLabel(status: TabletStatus) {
+		return {
+			pending: 'Chưa an vị',
+			enshrined: 'Đã an vị',
+			moving: 'Đang di dời',
+			moved: 'Đã di dời / lưu kho',
+			archived: 'Lưu trữ'
+		}[status];
+	}
+
+	function positionStatusSummary(position: Position) {
+		return position.tablet_statuses.map(tabletStatusLabel).join(' · ');
+	}
+
+	function positionStatusBadge(position: Position) {
+		return position.tablet_statuses.length === 1
+			? tabletStatusLabel(position.tablet_statuses[0])
+			: `${position.tablet_statuses.length} trạng thái`;
+	}
+
+	function compactSpiritName(name: string) {
+		const words = name.trim().split(/\s+/).filter(Boolean);
+		return words.length > 3 ? `${words.slice(0, 3).join(' ')}…` : words.join(' ');
+	}
+
+	function lifeYears(position: Position) {
+		const birth = position.single_spirit_birth_year || '?';
+		const death = position.single_spirit_death_year || '?';
+		return `${birth}–${death}`;
 	}
 
 	function pointerAnchor() {
@@ -260,6 +300,23 @@
 				<option value="high">Mật độ cao</option>
 				<option value="very-high">Mật độ rất cao</option>
 			</select>
+			<select
+				bind:value={tabletStatusFilter}
+				aria-label="Lọc trạng thái Bài vị"
+				class="h-10 rounded-md border-[var(--color-border-strong)] text-sm"
+			>
+				<option value="all">Tất cả trạng thái</option>
+				<option value="pending">Chưa an vị</option>
+				<option value="enshrined">Đã an vị</option>
+				<option value="moving">Đang di dời</option>
+				<option value="moved">Đã di dời / lưu kho</option>
+				<option value="archived">Lưu trữ</option>
+			</select>
+			{#if onfillcoordinates && maxRow > 0 && maxColumn > 0}<button
+				type="button"
+				onclick={() => onfillcoordinates({ maxRow, maxColumn })}
+				class="h-10 rounded-md border border-[var(--color-primary)] bg-[var(--color-primary-soft)] px-3 text-sm font-semibold text-[var(--color-primary-dark)]"
+			><span class="mr-1 icon-[lucide--grid-3x3] inline-block h-4 w-4 align-text-bottom"></span>Tạo mã cho ô trống</button>{/if}
 			<div
 				class="flex items-center rounded-md border border-[var(--color-border)] bg-[var(--color-surface)]"
 			>
@@ -357,45 +414,26 @@
 									'flex w-full min-w-0 flex-col overflow-hidden text-left transition enabled:hover:-translate-y-0.5 enabled:hover:shadow-md disabled:cursor-default disabled:opacity-15',
 									heatTone(position)
 								]}
-								style={`height: ${cellHeight}px; padding: ${cellPadding}px; border-radius: ${cellRadius}px;`}
+								style={`height: ${cellHeight}px; border-radius: ${cellRadius}px;`}
 							>
-								{#if showPositionLabel}
-									<strong class="block truncate leading-tight" style={`font-size: ${titleFontSize}px;`}>
-										{position.name}
-									</strong>
-								{/if}
-								{#if showSummary && position.tablet_count === 0}
+								{#if position.tablet_count > 0}<CardBaiVi
+									code={position.name}
+									spiritCount={position.spirit_count}
+									spiritNames={spiritNames}
+									birthYear={position.single_spirit_birth_year}
+									deathYear={position.single_spirit_death_year}
+									status={position.tablet_statuses[0] ?? 'enshrined'}
+									fontSize={metricFontSize}
+								/>{:else if showPositionLabel}
+									<strong class="m-2 text-left" style={`font-size: ${titleFontSize}px;`}>{position.name}</strong>
+									{#if showSummary}<span class="m-2 mt-0 text-left leading-tight font-semibold opacity-80" style={`font-size: ${metricFontSize}px;`}>+ Tạo bài vị</span>{/if}
+								{:else if showSummary}
 									<span
-										class="block leading-tight font-semibold opacity-80"
-										style={`margin-top: ${showPositionLabel ? titleGap : 0}px; font-size: ${metricFontSize}px;`}
+										class="grid h-full place-items-center leading-tight font-semibold opacity-80"
+										style={`font-size: ${metricFontSize}px;`}
 									>
 										+ Tạo bài vị
 									</span>
-								{:else if showSummary && !(showSpiritNames && visibleSpiritNames.length > 0)}
-									<span
-										class="block leading-tight opacity-80"
-										style={`margin-top: ${showPositionLabel ? titleGap : 0}px; font-size: ${metricFontSize}px;`}
-									>
-										{position.spirit_count} HL
-									</span>
-								{/if}
-								{#if showSpiritNames && visibleSpiritNames.length > 0}
-									<div
-										class="min-h-0 flex-1 overflow-hidden leading-snug opacity-90"
-										style={`margin-top: ${metricGap}px; font-size: ${spiritNameFontSize}px;`}
-									>
-										{#each visibleSpiritNames as spiritName, index (index)}
-											<span class="block truncate">{spiritName}</span>
-										{/each}
-									</div>
-								{/if}
-								{#if showSpiritNames && position.spirit_count > visibleSpiritNames.length}
-									<div
-										class="mt-auto leading-tight font-semibold opacity-80"
-										style={`padding-top: ${metricGap}px; font-size: ${metricFontSize}px;`}
-									>
-										+{position.spirit_count - visibleSpiritNames.length} HL
-									</div>
 								{/if}
 							</button>
 						{:else if onemptyposition}
@@ -421,6 +459,16 @@
 		</div>
 	{/if}
 </div>
+
+<style>
+	.position-tablet {
+		border: 1px solid #6f4b3b;
+		box-shadow:
+			inset 0 0 0 1px color-mix(in srgb, #ead1ad 65%, transparent),
+			inset 0 0 0 2px color-mix(in srgb, #6f4b3b 45%, transparent),
+			0 1px 2px rgb(44 28 20 / 18%);
+	}
+</style>
 
 {#snippet legend(label: string, tone: string)}
 	<span class="inline-flex items-center gap-1.5">

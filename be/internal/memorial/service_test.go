@@ -313,15 +313,38 @@ func TestCreateTabletAttachesExistingUnplacedSpiritsAtomically(t *testing.T) {
 	tablet, err := service.CreateTablet(ctx, admin, TabletInput{
 		PositionID:        firstPosition.ID,
 		Name:              "Bài vị kết hợp",
+		ImageURL:          "https://example.com/tablet.jpg",
+		Sender:            "Gia đình Nguyễn",
 		ExistingSpiritIDs: []string{unplaced.ID},
-		Spirits:           []SpiritInput{{FullName: "Hương linh nhập mới"}},
+		Spirits: []SpiritInput{{
+			FullName:             "Hương linh nhập mới",
+			FamiliarName:         "Cô Năm",
+			Gender:               "female",
+			BirthDate:            "1948-03-12",
+			BirthLunar:           "05/02/1948",
+			Status:               "enshrined",
+			EnshrinedAt:          "2026-08-19",
+			EnteredWorshipAreaAt: "2026-08-20",
+		}},
 	})
-	if err != nil || tablet.SpiritCount != 2 {
+	if err != nil || tablet.SpiritCount != 2 || tablet.ImageURL != "https://example.com/tablet.jpg" || tablet.Sender != "Gia đình Nguyễn" {
 		t.Fatalf("unexpected combined tablet: %#v err=%v", tablet, err)
 	}
 	attached, total, err := service.ListSpirits(ctx, admin, SearchOptions{TabletID: tablet.ID, Limit: 20})
 	if err != nil || total != 2 || len(attached) != 2 {
 		t.Fatalf("unexpected attached spirits: total=%d items=%#v err=%v", total, attached, err)
+	}
+	created := attached[0]
+	if created.FullName != "Hương linh nhập mới" {
+		created = attached[1]
+	}
+	if created.FamiliarName != "Cô Năm" || created.Gender != "female" || created.BirthDate != "1948-03-12" || created.BirthLunar != "05/02/1948" || created.Status != "enshrined" || created.EnshrinedAt != "2026-08-19" || created.EnteredWorshipAreaAt != "2026-08-20" {
+		t.Fatalf("tablet creation must preserve the complete spirit profile: %#v", created)
+	}
+	for _, spirit := range attached {
+		if spirit.ID == unplaced.ID && spirit.Status != "enshrined" {
+			t.Fatalf("an existing spirit attached to a tablet must become enshrined: %#v", spirit)
+		}
 	}
 	if _, err = service.CreateTablet(ctx, admin, TabletInput{PositionID: secondPosition.ID, Name: "Không được tạo", ExistingSpiritIDs: []string{unplaced.ID}}); !errors.Is(err, ErrConflict) {
 		t.Fatalf("already attached spirit should conflict, got %v", err)

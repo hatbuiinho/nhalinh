@@ -32,9 +32,14 @@ export type Position = {
 	image_url: string;
 	sender: string;
 	notes: string;
+	status: 'pending' | 'enshrined' | 'moving' | 'moved' | 'archived';
 	tablet_count: number;
 	spirit_count: number;
 	spirit_names: string[];
+	tablet_statuses: Array<'pending' | 'enshrined' | 'moving' | 'moved' | 'archived'>;
+	single_spirit_name: string;
+	single_spirit_birth_year: string;
+	single_spirit_death_year: string;
 };
 export type OccupancySummary = {
 	area_count: number;
@@ -74,6 +79,8 @@ export type Tablet = {
 	image_url: string;
 	sender: string;
 	notes: string;
+	status: 'pending' | 'enshrined' | 'moving' | 'moved' | 'archived';
+	type: 'ancestral' | 'spirit' | 'family';
 	spirit_count: number;
 };
 export type Spirit = {
@@ -173,6 +180,12 @@ export const createArea = (input: {
 	name: string;
 	notes: string;
 }) => apiRequest<Area>('/api/memorial-areas', { method: 'POST', body: JSON.stringify(input) });
+export const updateArea = (id: string, input: { code: string; name: string; notes: string }) =>
+	apiRequest<Area>(`/api/memorial-areas/${encodeURIComponent(id)}`, { method: 'PUT', body: JSON.stringify(input) });
+export const deleteArea = (id: string) =>
+	apiRequest<void>(`/api/memorial-areas/${encodeURIComponent(id)}`, { method: 'DELETE' });
+export const deleteHouse = (id: string) =>
+	apiRequest<void>(`/api/spirit-houses/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const listPositions = async (areaId: string) =>
 	(
 		await apiRequest<{ positions: Position[] }>(
@@ -237,6 +250,7 @@ export const createTablet = (input: {
 	image_url: string;
 	sender: string;
 	notes: string;
+	status?: Tablet['status'];
 	spirits: InlineSpiritInput[];
 	existing_spirit_ids?: string[];
 }) => apiRequest<Tablet>('/api/memorial-tablets', { method: 'POST', body: JSON.stringify(input) });
@@ -248,6 +262,7 @@ export const updateTablet = (
 		image_url: string;
 		sender: string;
 		notes: string;
+		status?: Tablet['status'];
 		spirits: Array<EditableSpiritInput & Partial<Pick<SpiritInput, 'has_urn'>>>;
 	}
 ) =>
@@ -276,7 +291,8 @@ export async function listSpirits(
 	houseId: string,
 	areaId: string,
 	limit = 25,
-	offset = 0
+	offset = 0,
+	urnStatus: '' | 'yes' | 'no' = ''
 ) {
 	const p = new URLSearchParams({
 		q: query,
@@ -286,6 +302,7 @@ export async function listSpirits(
 		limit: String(limit),
 		offset: String(offset)
 	});
+	if (urnStatus) p.set('urn_status', urnStatus);
 	return apiRequest<{ spirits: Spirit[]; total: number; has_more: boolean; next_offset: number }>(`/api/spirits?${p}`);
 }
 export const listUrnSpirits = async () =>

@@ -41,6 +41,8 @@ type tabletPayload struct {
 	ImageURL          string          `json:"image_url"`
 	Sender            string          `json:"sender"`
 	Notes             string          `json:"notes"`
+	Status            string          `json:"status"`
+	Type              string          `json:"type"`
 	Spirits           []spiritPayload `json:"spirits"`
 	ExistingSpiritIDs []string        `json:"existing_spirit_ids"`
 }
@@ -166,6 +168,27 @@ func (h *MemorialHandler) Areas(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 	}
 }
+func (h *MemorialHandler) Area(w http.ResponseWriter, r *http.Request) {
+	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/memorial-areas/"), "/")
+	if id == "" || strings.Contains(id, "/") {
+		writeError(w, 404, "not_found", "Không tìm thấy khu vực")
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var p areaPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		v, e := h.service.UpdateArea(r.Context(), actor(r), id, memorial.AreaInput{Code: p.Code, Name: p.Name, Notes: p.Notes})
+		h.write(w, v, e, http.StatusOK)
+	case http.MethodDelete:
+		e := h.service.DeleteArea(r.Context(), actor(r), id)
+		h.write(w, nil, e, http.StatusNoContent)
+	default:
+		methodNotAllowed(w)
+	}
+}
 func (h *MemorialHandler) Positions(w http.ResponseWriter, r *http.Request) {
 	switch r.Method {
 	case http.MethodGet:
@@ -256,7 +279,7 @@ func (h *MemorialHandler) Tablets(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
+		v, e := h.service.CreateTablet(r.Context(), actor(r), memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Status: p.Status, Type: p.Type, Spirits: spirits, ExistingSpiritIDs: p.ExistingSpiritIDs})
 		h.write(w, v, e, 201)
 	default:
 		methodNotAllowed(w)
@@ -285,7 +308,7 @@ func (h *MemorialHandler) Tablet(w http.ResponseWriter, r *http.Request) {
 		for _, spirit := range p.Spirits {
 			spirits = append(spirits, spiritInput(spirit))
 		}
-		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Spirits: spirits})
+		v, e := h.service.UpdateTablet(r.Context(), actor(r), id, memorial.TabletInput{PositionID: p.PositionID, Name: p.Name, ImageURL: p.ImageURL, Sender: p.Sender, Notes: p.Notes, Status: p.Status, Type: p.Type, Spirits: spirits})
 		h.write(w, v, e, 200)
 	case http.MethodDelete:
 		e := h.service.DeleteTablet(r.Context(), actor(r), id, r.URL.Query().Get("delete_spirits") == "true")

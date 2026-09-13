@@ -159,6 +159,21 @@ func (s *MemoryStore) DeleteHouse(_ context.Context, id string) error {
 	if _, ok := s.houses[id]; !ok {
 		return ErrNotFound
 	}
+	for _, area := range s.areas {
+		if area.HouseID == id {
+			return ErrConflict
+		}
+	}
+	for _, tablet := range s.tablets {
+		if tablet.HouseID == id {
+			return ErrConflict
+		}
+	}
+	for _, spirit := range s.spirits {
+		if spirit.HouseID == id && spirit.DeletedAt == nil {
+			return ErrConflict
+		}
+	}
 	delete(s.houses, id)
 	return nil
 }
@@ -217,6 +232,36 @@ func (s *MemoryStore) CreateArea(_ context.Context, v Area) (Area, error) {
 	s.areas[v.ID] = v
 	return v, nil
 }
+func (s *MemoryStore) UpdateArea(_ context.Context, v Area) (Area, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	old, ok := s.areas[v.ID]
+	if !ok {
+		return Area{}, ErrNotFound
+	}
+	for _, area := range s.areas {
+		if area.ID != v.ID && area.HouseID == old.HouseID && area.Code == v.Code {
+			return Area{}, ErrConflict
+		}
+	}
+	v.HouseID, v.CreatedAt = old.HouseID, old.CreatedAt
+	s.areas[v.ID] = v
+	return v, nil
+}
+func (s *MemoryStore) DeleteArea(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.areas[id]; !ok {
+		return ErrNotFound
+	}
+	for _, position := range s.positions {
+		if position.AreaID == id {
+			return ErrConflict
+		}
+	}
+	delete(s.areas, id)
+	return nil
+}
 func (s *MemoryStore) AreaCode(_ context.Context, id string) (string, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
@@ -240,19 +285,31 @@ func (s *MemoryStore) ListPositions(_ context.Context, _ Actor, areaID string) (
 		v.HouseID = h.ID
 		v.HouseName = h.Name
 		spiritNames := []string{}
+		tabletStatuses := map[string]bool{}
 		for _, t := range s.tablets {
 			if t.PositionID == v.ID {
 				v.TabletCount++
+				tabletStatuses[t.Status] = true
 				for _, spirit := range s.spirits {
 					if spirit.TabletID == t.ID && spirit.DeletedAt == nil {
 						v.SpiritCount++
 						spiritNames = append(spiritNames, spirit.FullName)
+						if v.SpiritCount == 1 {
+							v.SingleSpiritName = spirit.FullName
+							v.SingleSpiritBirthYear = spirit.BirthYear
+							v.SingleSpiritDeathYear = spirit.DeathYear
+						}
 					}
 				}
 			}
 		}
 		sort.Strings(spiritNames)
 		v.SpiritNames = spiritNames
+		v.TabletStatuses = make([]string, 0, len(tabletStatuses))
+		for status := range tabletStatuses {
+			v.TabletStatuses = append(v.TabletStatuses, status)
+		}
+		sort.Strings(v.TabletStatuses)
 		out = append(out, v)
 	}
 	sort.Slice(out, func(i, j int) bool {
@@ -410,6 +467,7 @@ func (s *MemoryStore) DeletePosition(_ context.Context, id string, now time.Time
 	for tabletID, tablet := range s.tablets {
 		if tablet.PositionID == id {
 			tablet.PositionID = ""
+			tablet.Status = "moved"
 			tablet.UpdatedAt = now
 			s.tablets[tabletID] = tablet
 		}
@@ -473,6 +531,7 @@ func (s *MemoryStore) MoveTablet(_ context.Context, tabletID, positionID string,
 		return ErrNotFound
 	}
 	tablet.PositionID = positionID
+	tablet.Status = "enshrined"
 	tablet.UpdatedAt = now
 	s.tablets[tabletID] = tablet
 	return nil
@@ -480,6 +539,9 @@ func (s *MemoryStore) MoveTablet(_ context.Context, tabletID, positionID string,
 func (s *MemoryStore) CreateTablet(_ context.Context, v Tablet) (Tablet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if v.Status == "" {
+		v.Status = "enshrined"
+	}
 	for _, x := range s.tablets {
 		if x.PositionID == v.PositionID && x.Name == v.Name {
 			return Tablet{}, ErrConflict
@@ -503,6 +565,9 @@ func (s *MemoryStore) CreateTablets(ctx context.Context, items []Tablet) ([]Tabl
 func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spirits []Spirit, existingSpiritIDs []string, houseID string) (Tablet, error) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
+	if v.Status == "" {
+		v.Status = "enshrined"
+	}
 	for _, x := range s.tablets {
 		if x.PositionID == v.PositionID && x.Name == v.Name {
 			return Tablet{}, ErrConflict
@@ -518,6 +583,7 @@ func (s *MemoryStore) CreateTabletWithSpirits(_ context.Context, v Tablet, spiri
 	for _, id := range existingSpiritIDs {
 		spirit := s.spirits[id]
 		spirit.TabletID = v.ID
+		spirit.Status = "enshrined"
 		spirit.UpdatedAt = v.UpdatedAt
 		s.spirits[id] = spirit
 	}

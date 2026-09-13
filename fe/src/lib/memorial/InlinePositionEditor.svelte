@@ -98,16 +98,11 @@
 				Biểu mẫu này chỉ tạo vị trí; bài vị và Hương linh sẽ được thêm sau từ ô có mã trên sơ đồ.
 			</p>
 		</div>
-		<div
-			class="mb-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3"
-		>
-			<div class="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-				<span class="text-sm font-semibold">Tạo nhiều vị trí theo sơ đồ lưới</span>
-				<span class="text-xs text-[var(--color-text-secondary)]"
-					>Ví dụ: cột 1–10, hàng 1–5 tạo 50 mã từ 1{areaCode}-1 đến 10{areaCode}-5</span
-				>
-			</div>
-			<div class="grid gap-2 sm:grid-cols-5">
+		<div class="mb-3 grid gap-3 lg:grid-cols-2">
+			<section class="rounded-md border border-[var(--color-primary)]/35 bg-[var(--color-primary-soft)] p-3">
+				<div class="mb-2 flex items-center justify-between gap-2"><div><p class="text-sm font-semibold text-[var(--color-primary-dark)]">Cách 1 · Tạo theo sơ đồ lưới</p><p class="mt-0.5 text-xs text-[var(--color-text-secondary)]">Nên dùng khi tạo cả dãy vị trí.</p></div><span class="rounded-full bg-[var(--color-surface)] px-2 py-1 text-[10px] font-semibold text-[var(--color-primary-dark)]">Khuyến nghị</span></div>
+				<p class="mb-3 text-xs text-[var(--color-text-secondary)]">Ví dụ: cột 1–10, hàng 1–5 tạo 50 mã từ 1{areaCode}-1 đến 10{areaCode}-5.</p>
+			<div class="grid gap-2 sm:grid-cols-4">
 				<label
 					><span class="mb-1 block text-xs font-medium">Cột từ *</span><input
 						bind:value={matrix.columnFrom}
@@ -142,46 +137,40 @@
 						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
 					/></label
 				>
-				<label
-					><span class="mb-1 block text-xs font-medium">Ghi chú chung</span><input
-						bind:value={matrix.notes}
-						class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs"
-					/></label
-				>
 			</div>
+			<label class="mt-2 block"><span class="mb-1 block text-xs font-medium">Ghi chú chung <span class="font-normal text-[var(--color-text-secondary)]">(áp dụng cho tất cả vị trí tạo theo lưới)</span></span><input bind:value={matrix.notes} class="h-9 w-full rounded-md border-[var(--color-border-strong)] text-xs" /></label>
 			<button
 				type="button"
 				onclick={createMatrix}
-				class="mt-3 h-9 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"
-				>Tạo các vị trí</button
+				class="mt-3 h-9 rounded-md bg-[var(--color-primary)] px-3 text-xs font-semibold text-white"
+				>Tạo vào danh sách bên dưới</button
 			>
-		</div>
-		<div class="flex items-center gap-2">
-			<label class="min-w-0 flex-1"
-				><span class="mb-1 block text-xs font-medium">Dán từ Excel / Google Sheets</span><textarea
-					bind:value={sheetPaste}
+			</section>
+			<section class="rounded-md border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3">
+				<p class="text-sm font-semibold">Cách 2 · Dán từ Excel / Google Sheets</p>
+				<p class="mt-0.5 text-xs text-[var(--color-text-secondary)]">Mỗi dòng gồm: Cột, Hàng, Ghi chú (nếu có).</p>
+				<label class="mt-3 block"
+					><span class="sr-only">Dữ liệu vị trí từ Excel</span><textarea
+				bind:value={sheetPaste}
 					onpaste={(event) => {
 						event.preventDefault();
 						importSheet(event.clipboardData?.getData('text') ?? '');
 					}}
-					rows="2"
-					placeholder="Cột | Hàng | Ghi chú"
-					class="w-full rounded-md border-[var(--color-border-strong)] text-xs"></textarea></label
+				rows="4"
+				placeholder="1 | 1 | Hàng đầu&#10;2 | 1 |"
+				class="w-full rounded-md border-[var(--color-border-strong)] text-xs"></textarea></label
 			>
 			{#if sheetPaste.trim()}<button
 					type="button"
 					onclick={() => importSheet(sheetPaste)}
-					class="h-9 shrink-0 rounded-md bg-[var(--color-primary-soft)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"
-					>Nhập dữ liệu</button
-				>{/if}<button
-				type="button"
-				onclick={addRow}
-				class="h-9 shrink-0 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"
-				>Thêm dòng</button
-			>
+					class="mt-2 h-9 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"
+					>Nhập vào danh sách bên dưới</button
+				>{/if}
+			</section>
 		</div>
 	</div>
 	<div class="min-h-0 flex-1 overflow-y-auto pt-3 pr-1">
+		<div class="mb-2 flex items-center justify-between gap-3"><div><p class="text-sm font-semibold">Cách 3 · Kiểm tra và bổ sung thủ công</p><p class="text-xs text-[var(--color-text-secondary)]">Danh sách sẽ được lưu khi bấm “Lưu” ở cuối biểu mẫu.</p></div><button type="button" onclick={addRow} class="h-9 shrink-0 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"><span class="mr-1 icon-[lucide--plus] inline-block h-3.5 w-3.5 align-text-bottom"></span>Thêm một vị trí</button></div>
 		<div class="space-y-2">
 			{#each items as position, index (index)}{@const required =
 					index === 0 || Object.values(position).some((value) => value.trim())}

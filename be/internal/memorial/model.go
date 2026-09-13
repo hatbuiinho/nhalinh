@@ -41,20 +41,24 @@ type Area struct {
 	UpdatedAt     time.Time `json:"updated_at"`
 }
 type Position struct {
-	ID           string    `json:"id"`
-	AreaID       string    `json:"area_id"`
-	HouseID      string    `json:"house_id"`
-	HouseName    string    `json:"house_name"`
-	AreaCode     string    `json:"area_code"`
-	RowNumber    int       `json:"row_number"`
-	ColumnNumber int       `json:"column_number"`
-	Name         string    `json:"name"`
-	Notes        string    `json:"notes"`
-	TabletCount  int       `json:"tablet_count"`
-	SpiritCount  int       `json:"spirit_count"`
-	SpiritNames  []string  `json:"spirit_names"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID                    string    `json:"id"`
+	AreaID                string    `json:"area_id"`
+	HouseID               string    `json:"house_id"`
+	HouseName             string    `json:"house_name"`
+	AreaCode              string    `json:"area_code"`
+	RowNumber             int       `json:"row_number"`
+	ColumnNumber          int       `json:"column_number"`
+	Name                  string    `json:"name"`
+	Notes                 string    `json:"notes"`
+	TabletCount           int       `json:"tablet_count"`
+	SpiritCount           int       `json:"spirit_count"`
+	SpiritNames           []string  `json:"spirit_names"`
+	TabletStatuses        []string  `json:"tablet_statuses"`
+	SingleSpiritName      string    `json:"single_spirit_name"`
+	SingleSpiritBirthYear string    `json:"single_spirit_birth_year"`
+	SingleSpiritDeathYear string    `json:"single_spirit_death_year"`
+	CreatedAt             time.Time `json:"created_at"`
+	UpdatedAt             time.Time `json:"updated_at"`
 }
 type OccupancySummary struct {
 	AreaCount           int `json:"area_count"`
@@ -94,6 +98,8 @@ type Tablet struct {
 	ImageURL     string    `json:"image_url"`
 	Sender       string    `json:"sender"`
 	Notes        string    `json:"notes"`
+	Status       string    `json:"status"`
+	Type         string    `json:"type"`
 	SpiritCount  int       `json:"spirit_count"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
@@ -156,9 +162,9 @@ type PositionInput struct {
 	Notes                   string
 }
 type TabletInput struct {
-	PositionID, Name, ImageURL, Sender, Notes string
-	Spirits                                   []SpiritInput
-	ExistingSpiritIDs                         []string
+	PositionID, Name, ImageURL, Sender, Notes, Status, Type string
+	Spirits                                                 []SpiritInput
+	ExistingSpiritIDs                                       []string
 }
 type SpiritInput struct {
 	ID, HouseID, TabletID, FullName, DharmaName, FamiliarName, Gender, BirthDate, DeathDate, BirthLunar, DeathLunar, BirthYear, DeathYear, Status, EnteredWorshipAreaAt, EnshrinedAt, Age, ImageURL, BurialPlace, Sender, SentMonth, Notes string

@@ -55,6 +55,7 @@ func NewRouter(
 	protected.Handle("/api/spirit-houses", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Houses)))
 	protected.Handle("/api/spirit-houses/", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.House)))
 	protected.Handle("/api/memorial-areas", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Areas)))
+	protected.Handle("/api/memorial-areas/", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Area)))
 	protected.Handle("/api/memorial-positions", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Positions)))
 	protected.Handle("POST /api/memorial-positions/batch", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.PositionsBatch)))
 	protected.Handle("/api/memorial-positions/", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Position)))

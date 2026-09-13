@@ -140,6 +140,30 @@ func (s *Service) CreateArea(ctx context.Context, actor Actor, in AreaInput) (Ar
 	now := s.now().UTC()
 	return s.store.CreateArea(ctx, Area{ID: newID("area"), HouseID: in.HouseID, Code: in.Code, Name: strings.TrimSpace(in.Name), Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now})
 }
+func (s *Service) UpdateArea(ctx context.Context, actor Actor, id string, in AreaInput) (Area, error) {
+	house, err := s.store.HouseIDForArea(ctx, id)
+	if err != nil {
+		return Area{}, err
+	}
+	if err = s.requireWrite(ctx, actor, house); err != nil {
+		return Area{}, err
+	}
+	in.Code = strings.ToUpper(strings.TrimSpace(in.Code))
+	if in.Code == "" {
+		return Area{}, fmt.Errorf("%w: code is required", ErrInvalidInput)
+	}
+	return s.store.UpdateArea(ctx, Area{ID: id, HouseID: house, Code: in.Code, Name: strings.TrimSpace(in.Name), Notes: strings.TrimSpace(in.Notes), UpdatedAt: s.now().UTC()})
+}
+func (s *Service) DeleteArea(ctx context.Context, actor Actor, id string) error {
+	house, err := s.store.HouseIDForArea(ctx, id)
+	if err != nil {
+		return err
+	}
+	if err = s.requireWrite(ctx, actor, house); err != nil {
+		return err
+	}
+	return s.store.DeleteArea(ctx, id)
+}
 func (s *Service) ListPositions(ctx context.Context, actor Actor, areaID string) ([]Position, error) {
 	house, err := s.store.HouseIDForArea(ctx, areaID)
 	if err != nil {
@@ -353,7 +377,15 @@ func (s *Service) CreateTablet(ctx context.Context, actor Actor, in TabletInput)
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
 	now := s.now().UTC()
-	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), CreatedAt: now, UpdatedAt: now}
+	status, err := normalizeTabletStatus(in.Status, "enshrined")
+	if err != nil {
+		return Tablet{}, err
+	}
+	tabletType, err := normalizeTabletType(in.Type)
+	if err != nil {
+		return Tablet{}, err
+	}
+	tablet := Tablet{ID: newID("tablet"), HouseID: house, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), Status: status, Type: tabletType, CreatedAt: now, UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {
 		spiritInput.TabletID = tablet.ID
@@ -392,7 +424,15 @@ func (s *Service) UpdateTablet(ctx context.Context, actor Actor, id string, in T
 		return Tablet{}, fmt.Errorf("%w: a tablet must contain between 1 and 500 spirits", ErrInvalidInput)
 	}
 	now := s.now().UTC()
-	tablet := Tablet{ID: id, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), UpdatedAt: now}
+	status, err := normalizeTabletStatus(in.Status, "enshrined")
+	if err != nil {
+		return Tablet{}, err
+	}
+	tabletType, err := normalizeTabletType(in.Type)
+	if err != nil {
+		return Tablet{}, err
+	}
+	tablet := Tablet{ID: id, PositionID: in.PositionID, Name: name, ImageURL: strings.TrimSpace(in.ImageURL), Sender: strings.TrimSpace(in.Sender), Notes: strings.TrimSpace(in.Notes), Status: status, Type: tabletType, UpdatedAt: now}
 	spirits := make([]Spirit, 0, len(in.Spirits))
 	seenIDs := make(map[string]bool, len(in.Spirits))
 	for index, spiritInput := range in.Spirits {
@@ -651,6 +691,29 @@ func (s *Service) normalizeSpirit(in SpiritInput) (Spirit, error) {
 		return Spirit{}, fmt.Errorf("%w: enshrined spirit requires enshrined_at", ErrInvalidInput)
 	}
 	return Spirit{HouseID: strings.TrimSpace(in.HouseID), TabletID: strings.TrimSpace(in.TabletID), FullName: in.FullName, DharmaName: strings.TrimSpace(in.DharmaName), FamiliarName: strings.TrimSpace(in.FamiliarName), Gender: strings.TrimSpace(in.Gender), BirthDate: strings.TrimSpace(in.BirthDate), DeathDate: strings.TrimSpace(in.DeathDate), BirthLunar: strings.TrimSpace(in.BirthLunar), DeathLunar: strings.TrimSpace(in.DeathLunar), BirthYear: strings.TrimSpace(in.BirthYear), DeathYear: strings.TrimSpace(in.DeathYear), Status: status, EnteredWorshipAreaAt: strings.TrimSpace(in.EnteredWorshipAreaAt), EnshrinedAt: strings.TrimSpace(in.EnshrinedAt), Age: strings.TrimSpace(in.Age), ImageURL: strings.TrimSpace(in.ImageURL), BurialPlace: strings.TrimSpace(in.BurialPlace), Sender: strings.TrimSpace(in.Sender), SentMonth: strings.TrimSpace(in.SentMonth), Notes: strings.TrimSpace(in.Notes), HasUrn: in.HasUrn}, nil
+}
+
+func normalizeTabletStatus(raw, fallback string) (string, error) {
+	status := strings.TrimSpace(raw)
+	if status == "" {
+		status = fallback
+	}
+	switch status {
+	case "pending", "enshrined", "moving", "moved", "archived":
+		return status, nil
+	default:
+		return "", fmt.Errorf("%w: invalid tablet status", ErrInvalidInput)
+	}
+}
+func normalizeTabletType(raw string) (string, error) {
+	tabletType := strings.TrimSpace(raw)
+	if tabletType == "" {
+		return "spirit", nil
+	}
+	if !map[string]bool{"ancestral": true, "spirit": true, "family": true}[tabletType] {
+		return "", fmt.Errorf("%w: invalid tablet type", ErrInvalidInput)
+	}
+	return tabletType, nil
 }
 func (s *Service) requireWrite(ctx context.Context, a Actor, h string) error {
 	r, e := s.store.AccessRole(ctx, a, h)

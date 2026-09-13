@@ -13,6 +13,8 @@ type Store interface {
 	AccessRole(context.Context, Actor, string) (string, error)
 	ListAreas(context.Context, Actor, string) ([]Area, error)
 	CreateArea(context.Context, Area) (Area, error)
+	UpdateArea(context.Context, Area) (Area, error)
+	DeleteArea(context.Context, string) error
 	AreaCode(context.Context, string) (string, error)
 	ListPositions(context.Context, Actor, string) ([]Position, error)
 	ListOccupancyPositions(context.Context, Actor, string) ([]Position, int, error)

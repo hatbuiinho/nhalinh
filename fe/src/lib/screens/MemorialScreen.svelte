@@ -7,9 +7,9 @@
 	import Lightbox from '$lib/ui/Lightbox.svelte';
 	import Popup from '$lib/ui/Popup.svelte';
 	import InlineSpiritEditor from '$lib/memorial/InlineSpiritEditor.svelte';
+	import CardBaiVi from '$lib/memorial/CardBaiVi.svelte';
 	import SpiritImageUploader from '$lib/memorial/SpiritImageUploader.svelte';
 	import SpiritPortrait from '$lib/memorial/SpiritPortrait.svelte';
-	import TabletPortrait from '$lib/memorial/TabletPortrait.svelte';
 	import { memorialRevisionStore } from '$lib/memorial/memorial-revision-store.svelte';
 	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 	import { uploadSpiritImage } from '$lib/uploads/api';
@@ -18,6 +18,7 @@
 		createTablet,
 		createSpirits,
 		bulkDeleteSpirits,
+		deleteTablet,
 		bulkPatchSpirits,
 		deleteSpirit,
 		downloadSpiritImportTemplate,
@@ -105,12 +106,11 @@
 		{ key: 'burial_place', label: 'Nơi an táng', defaultWidth: 144 },
 		{ key: 'sender', label: 'Người gửi', defaultWidth: 128 },
 		{ key: 'sent_month', label: 'Ngày gửi', defaultWidth: 96 },
-		{ key: 'notes', label: 'Ghi chú', defaultWidth: 160 },
-		{ key: 'has_urn', label: 'Hũ Cốt', defaultWidth: 80 }
+		{ key: 'has_urn', label: 'Hũ Cốt', defaultWidth: 80 },
+		{ key: 'notes', label: 'Ghi chú', defaultWidth: 160 }
 	];
 	const placementColumns: SpiritColumn[] = [
-		{ key: 'position_name', label: 'Vị trí', defaultWidth: 64 },
-		{ key: 'tablet_image_url', label: 'Bài Vị', defaultWidth: 96 }
+		{ key: 'tablet_image_url', label: 'Bài Vị', defaultWidth: 92 }
 	];
 	const columnWidthsStorageKey = 'nhalinh:spirit-table-column-widths:v3';
 	const spiritSortKeys = new Set<SpiritSortKey>(['full_name', 'dharma_name', 'birth_year', 'death_year', 'age', 'sender', 'sent_month', 'has_urn']);
@@ -134,6 +134,7 @@
 		spirits = $state<Spirit[]>([]);
 	let houseId = $state(''),
 		areaId = $state(''),
+		urnStatus = $state<'' | 'yes' | 'no'>(''),
 		query = $state(''),
 		total = $state(0),
 		spiritGroupOffset = $state(0),
@@ -420,11 +421,11 @@
 		lightboxAlt = item.full_name;
 		lightboxOpen = true;
 	}
-	function openTabletImage(item: Spirit) {
-		if (!item.tablet_image_url) return;
-		lightboxSrc = item.tablet_image_url;
-		lightboxAlt = `Ảnh bài vị ${item.tablet_name}`;
-		lightboxOpen = true;
+	function tabletDisplayImage(items: Spirit[]) {
+		return items[0]?.tablet_image_url || items.find((item) => item.image_url)?.image_url || '';
+	}
+	function tabletSavedImage(imageUrl: string, items: Pick<Spirit, 'image_url'>[]) {
+		return imageUrl || (items.length === 1 ? items[0].image_url : '');
 	}
 	function formatTimestamp(value: string) {
 		return value ? new Intl.DateTimeFormat('vi-VN').format(new Date(value)) : '—';
@@ -546,12 +547,14 @@
 		const requestVersion = ++spiritRequestVersion;
 		const selectedHouseID = houseId;
 		const selectedAreaID = areaId;
+		const selectedUrnStatus = urnStatus;
 		const selectedQuery = query;
-		const page = await listSpirits(selectedQuery, selectedHouseID, selectedAreaID);
+		const page = await listSpirits(selectedQuery, selectedHouseID, selectedAreaID, 25, 0, selectedUrnStatus);
 		if (
 			requestVersion !== spiritRequestVersion ||
 			selectedHouseID !== houseId ||
 			selectedAreaID !== areaId ||
+			selectedUrnStatus !== urnStatus ||
 			selectedQuery !== query
 		)
 			return;
@@ -566,7 +569,7 @@
 		if (loadingMore || !hasMore) return;
 		loadingMore = true;
 		try {
-			const page = await listSpirits(query, houseId, areaId, 25, spiritGroupOffset);
+			const page = await listSpirits(query, houseId, areaId, 25, spiritGroupOffset, urnStatus);
 			const known = new Set(spirits.map((item) => item.id));
 			spirits = [...spirits, ...page.spirits.filter((item) => !known.has(item.id))];
 			spiritGroupOffset = page.next_offset;
@@ -1161,7 +1164,7 @@
 					await updateTablet(selectedFormTablet.id, {
 						position_id: selectedFormTablet.position_id,
 						name: selectedFormTablet.name,
-						image_url: selectedFormTablet.image_url,
+						image_url: tabletSavedImage(selectedFormTablet.image_url, relatedSpirits.map((spirit) => spirit.id === editing?.id ? form : spirit)),
 						sender: selectedFormTablet.sender,
 						notes: selectedFormTablet.notes,
 						spirits: relatedSpirits.map((spirit) => {
@@ -1205,7 +1208,7 @@
 					await createTablet({
 						position_id: selectedFormPosition.id,
 						name: newTabletForm.name.trim() || newSpirits[0].full_name.trim(),
-						image_url: newTabletForm.image_url,
+						image_url: tabletSavedImage(newTabletForm.image_url, newSpirits),
 						sender: newTabletForm.sender,
 						notes: newTabletForm.notes,
 						spirits: newSpirits
@@ -1227,7 +1230,7 @@
 				await createTablet({
 					position_id: selectedFormPosition.id,
 					name: rows[0].full_name,
-					image_url: '',
+					image_url: tabletSavedImage('', rows),
 					sender: '',
 					notes: '',
 					spirits: rows
@@ -1364,6 +1367,27 @@
 			toastStore.error(message(e));
 		}
 	}
+	async function removeTablet(item: Spirit) {
+		if (!item.tablet_id) {
+			await remove(item);
+			return;
+		}
+		const ok = await popupStore.confirm({
+			title: 'Xóa Bài vị?',
+			message: `Bài vị ${item.tablet_name || item.position_name} sẽ bị xóa. Các Hương linh thuộc Bài vị sẽ chuyển về danh sách chưa xếp.`,
+			confirmLabel: 'Xóa Bài vị',
+			tone: 'danger'
+		});
+		if (!ok) return;
+		try {
+			await deleteTablet(item.tablet_id);
+			memorialRevisionStore.invalidate();
+			toastStore.success('Đã xóa Bài vị; Hương linh được chuyển về chưa xếp');
+			await load();
+		} catch (e) {
+			toastStore.error(message(e));
+		}
+	}
 	function toggleSpiritSelection(id: string) {
 		const next = new Set(selectedSpiritIDs);
 		next.has(id) ? next.delete(id) : next.add(id);
@@ -1492,7 +1516,7 @@
 	]}
 >
 	<div class="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 md:px-6 lg:px-8">
-	<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[180px_1fr_auto]">
+	<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[180px_150px_1fr_auto]">
 			<select
 				bind:value={areaId}
 				onchange={() => void changeArea()}
@@ -1501,6 +1525,13 @@
 				><option value="">Tất cả khu vực</option>{#each areas as a (a.id)}<option value={a.id}
 						>Khu {a.code}{a.name ? ` – ${a.name}` : ''}</option
 					>{/each}</select
+			>
+			<select
+				bind:value={urnStatus}
+				onchange={() => void load()}
+				aria-label="Lọc theo Hũ cốt"
+				class="h-11 rounded-md border-[var(--color-border-strong)] text-sm"
+				><option value="">Tất cả Hũ cốt</option><option value="yes">Có Hũ cốt</option><option value="no">Chưa có Hũ cốt</option></select
 			>
 			<label class="relative"
 				><span
@@ -1667,8 +1698,8 @@
 					{@render loadMoreButton()}
 				</div>
 				{@render spiritTable()}
-			{:else}<div class="min-h-0 flex-1 overflow-y-auto">
-					{@render spiritCardGroups()}
+	{:else}<div class="min-h-0 flex-1 overflow-y-auto">
+					{@render tabletCardGrid()}
 					{@render loadMoreButton()}
 				</div>{/if}
 		</div>
@@ -2098,24 +2129,30 @@
 						: 'md:grid-cols-2'
 				]}
 			>
+				{#if !editing}<div class="rounded-md border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)] p-3 text-sm text-[var(--color-primary-dark)] md:col-span-2">
+					<p class="font-semibold">Nhập theo 3 bước</p>
+					<p class="mt-1 text-xs leading-relaxed">1. Chọn Nhà Linh và vị trí (có thể để trống). 2. Chọn Bài vị có sẵn hoặc tạo mới tại vị trí đó. 3. Nhập hồ sơ Hương linh và lưu.</p>
+				</div>{/if}
 				{#if relatedTabletId && editing && selectedFormTablet}<div
 						class="shrink-0 overflow-visible pb-4"
 					>
 						<SpiritImageUploader
-							imageUrl={selectedFormTablet.image_url}
+							imageUrl={tabletDisplayImage(relatedSpirits)}
 							displayName={selectedFormTablet.name}
 							uploading={imageUploading}
 							tablet
 							onselect={selectTabletImage}
 						/>
+						{#if !selectedFormTablet.image_url && relatedSpirits.length === 1 && relatedSpirits[0].image_url}<p class="mt-2 text-xs text-[var(--color-text-secondary)]">Đang dùng mặc định ảnh của Hương linh duy nhất.</p>{:else if relatedSpirits.length > 1}<label class="mt-2 block text-xs text-[var(--color-text-secondary)]">Ảnh đại diện từ Hương linh<select value={selectedFormTablet.image_url} onchange={(event) => { selectedFormTablet.image_url = event.currentTarget.value; markEditingFormChanged(); }} class="mt-1 h-8 w-full rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 text-sm"><option value="">Chưa chọn — dùng ảnh Hương linh tạm thời</option>{#each relatedSpirits.filter((spirit) => spirit.image_url) as spirit (spirit.id)}<option value={spirit.image_url}>{spirit.full_name}</option>{/each}</select></label>{/if}
 					</div>{:else if creatingTablet}<div class="shrink-0 overflow-visible pb-4">
 						<SpiritImageUploader
-							imageUrl={newTabletForm.image_url}
+							imageUrl={newTabletForm.image_url || newSpirits.find((spirit) => spirit.image_url)?.image_url || ''}
 							displayName={newTabletForm.name || form.full_name}
 							uploading={imageUploading}
 							tablet
 							onselect={selectNewTabletImage}
 						/>
+						{#if !newTabletForm.image_url && newSpirits.length === 1 && newSpirits[0].image_url}<p class="mt-2 text-xs text-[var(--color-text-secondary)]">Ảnh của Hương linh duy nhất sẽ tự trở thành ảnh Bài vị khi lưu.</p>{:else if newSpirits.length > 1}<label class="mt-2 block text-xs text-[var(--color-text-secondary)]">Ảnh đại diện từ Hương linh<select bind:value={newTabletForm.image_url} class="mt-1 h-8 w-full rounded border border-[var(--color-border-strong)] bg-[var(--color-surface)] px-2 text-sm"><option value="">Chưa chọn — dùng ảnh Hương linh tạm thời</option>{#each newSpirits.filter((spirit) => spirit.image_url) as spirit (spirit.id)}<option value={spirit.image_url}>{spirit.full_name}</option>{/each}</select></label>{/if}
 					</div>{/if}
 				<div
 					class={relatedTabletId || singleSpiritEntry
@@ -2158,7 +2195,7 @@
 							class={`relative ${houses.length > 1 || singleSpiritEntry || editing ? '' : 'md:col-span-2'}`}
 						>
 							<label class="block"
-								><span class="mb-1 block text-sm font-medium">Vị trí (không bắt buộc)</span>
+								><span class="mb-1 block text-sm font-medium">Bước 1 · Vị trí (không bắt buộc)</span>
 								<div class="flex gap-2">
 									<div class="relative min-w-0 flex-1">
 										<input
@@ -2214,7 +2251,7 @@
 								</div>{/if}
 						</div>
 						{#if selectedFormPosition && !editing && !singleSpiritEntry}<label class="md:col-span-2"
-								><span class="mb-1 block text-sm font-medium">Bài vị hiện có</span><select
+								><span class="mb-1 block text-sm font-medium">Bước 2 · Bài vị hiện có</span><select
 									bind:value={form.tablet_id}
 									onchange={() => (quickCreateTablet = false)}
 									disabled={tabletLoading || Boolean(relatedTabletId && !editing)}
@@ -2266,13 +2303,10 @@
 										class="flex flex-col items-stretch gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
 									>
 										<div class="min-w-0">
-											<h3 class="truncate text-sm font-semibold">
-												Hương linh cùng bài vị: {relatedTabletName}
-											</h3>
-											<p class="text-xs text-[var(--color-text-secondary)]">
-												Chọn một dòng để sửa Hương linh đó.
-											</p>
-										</div>
+													<h3 class="truncate text-sm font-semibold">
+														Hương linh cùng bài vị: {relatedTabletName}
+													</h3>
+												</div>
 										{#if canWrite}<button
 												type="button"
 												onclick={addRelatedSpirit}
@@ -2286,15 +2320,16 @@
 												<LoadingIndicator label="Đang tải Hương linh cùng bài vị..." />
 											</div>
 										{:else}
-											<div class="divide-y divide-[var(--color-border)] md:hidden">
+											<div class="grid gap-3 p-3 sm:grid-cols-2 xl:grid-cols-3">
 												{#each relatedSpirits as related (related.id)}
 													<article
 														class={[
-															'p-3',
-															related.id === editing?.id ? 'bg-[var(--color-primary-soft)]' : ''
+															'relative overflow-hidden rounded-[5px] border border-[#c7ad78] bg-[#fffdf7] p-3 shadow-[0_1px_2px_rgb(73_53_28_/_10%)]',
+															related.id === editing?.id ? 'ring-2 ring-[var(--color-primary)]/45' : ''
 														]}
 													>
-														<div class="flex items-start gap-3">
+														<span class="absolute inset-1 rounded-[3px] border border-[#c7ad78]/30 pointer-events-none"></span>
+														<div class="relative flex items-start gap-3">
 															{#if related.image_url}<img
 																src={related.image_url}
 																alt={`Ảnh ${related.full_name}`}
@@ -2304,30 +2339,39 @@
 																><span class="icon-[lucide--user-round] h-4 w-4" aria-hidden="true"></span></span
 															>{/if}
 															<div class="min-w-0 flex-1">
+																<p class="mb-1 text-[10px] font-bold tracking-[0.06em] text-[#80673c]">HƯƠNG LINH</p>
 																<p class="truncate font-semibold">{related.full_name}</p>
 																<p class="text-sm text-[var(--color-text-secondary)]">
 																	{related.dharma_name || 'Chưa có pháp danh'}
 																</p>
 															</div>
 														</div>
-														<div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">
+														<div class="relative mt-3 grid grid-cols-2 gap-x-3 gap-y-1.5 text-xs text-[var(--color-text-secondary)]">
 															<span>Năm sinh: {related.birth_year || '—'}</span>
 															<span>Năm mất: {related.death_year || '—'}</span>
 															<span>Tuổi: {related.age || '—'}</span>
 															<span>Tháng gửi: {related.sent_month || '—'}</span>
 															<span class="col-span-2">Nơi an táng: {related.burial_place || '—'}</span>
+															{#if related.death_date}<span class="col-span-2">Ngày mất/kỵ: {related.death_date}</span>{/if}
+															{#if related.enshrined_at}<span class="col-span-2">Ngày an vị: {related.enshrined_at}</span>{/if}
 														</div>
-														{#if canWrite}<div class="mt-3 grid grid-cols-2 gap-2">
+														{#if canWrite}<div class="relative mt-3 grid grid-cols-2 gap-2">
 															<button
 																type="button"
-																onclick={() => selectRelatedSpirit(related)}
+																onclick={(event) => {
+																	event.stopPropagation();
+																	selectRelatedSpirit(related);
+																}}
 																class="h-10 rounded-md border border-[var(--color-primary)] text-sm font-semibold text-[var(--color-primary-dark)]"
 															>Chỉnh sửa</button
 															>
 															<button
 																type="button"
 																disabled={relatedSpirits.length <= 1}
-																onclick={() => void removeRelatedSpirit(related)}
+																onclick={(event) => {
+																	event.stopPropagation();
+																	void removeRelatedSpirit(related);
+																}}
 																class="h-10 rounded-md border border-[var(--color-danger)] text-sm font-semibold text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-40"
 															>Xóa</button
 															>
@@ -2335,7 +2379,7 @@
 													</article>
 												{/each}
 											</div>
-											<table class="hidden w-full table-auto text-left text-sm md:table">
+											<table class="hidden w-full table-auto text-left text-sm">
 												<thead
 													class="bg-[var(--color-surface)] text-xs text-[var(--color-text-secondary)]"
 												>
@@ -2535,8 +2579,8 @@
 												? 'Cập nhập thông tin Hương Linh'
 												: 'Thông tin Hương Linh'}
 									</h3>
-									<div class="grid gap-4 p-3 md:grid-cols-2">
-										<div class="shrink-0 overflow-visible pb-1 md:col-span-2">
+									<div class={addingRelatedSpirit ? 'grid gap-2 p-3 sm:grid-cols-2 xl:grid-cols-3' : 'grid gap-4 p-3 md:grid-cols-2'}>
+										<div class={addingRelatedSpirit ? 'shrink-0 overflow-visible pb-1 sm:col-span-2 xl:col-span-1' : 'shrink-0 overflow-visible pb-1 md:col-span-2'}>
 											<SpiritImageUploader
 												imageUrl={addingRelatedSpirit ? relatedSpiritForm.image_url : form.image_url}
 												displayName={addingRelatedSpirit
@@ -2599,8 +2643,8 @@
 											false,
 											addingRelatedSpirit ? relatedSpiritForm : form
 										)}{@render field('Nơi an táng', 'burial_place', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Ngày đưa vào khu thờ', 'entered_worship_area_at', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Ngày an vị', 'enshrined_at', false, addingRelatedSpirit ? relatedSpiritForm : form)}
-										<label><span class="mb-1 block text-sm font-medium">Tình trạng</span><select value={(addingRelatedSpirit ? relatedSpiritForm : form).status} onchange={(event) => { if (addingRelatedSpirit) relatedSpiritForm.status = event.currentTarget.value; else form.status = event.currentTarget.value; }} class="h-11 w-full rounded-md border-[var(--color-border-strong)]"><option value="draft">Nháp</option><option value="worshipping">Đang thờ</option><option value="enshrined">Đã an vị</option><option value="moved">Đã chuyển</option><option value="dedicated">Đã hồi hướng</option><option value="archived">Đã lưu trữ</option></select></label>
-										<label class="flex h-11 items-center gap-2 rounded-md border border-[var(--color-border-strong)] px-3 text-sm md:col-span-2">
+										<label><span class={addingRelatedSpirit ? 'mb-1 block text-xs font-medium' : 'mb-1 block text-sm font-medium'}>Tình trạng</span><select value={(addingRelatedSpirit ? relatedSpiritForm : form).status} onchange={(event) => { if (addingRelatedSpirit) relatedSpiritForm.status = event.currentTarget.value; else form.status = event.currentTarget.value; }} class={addingRelatedSpirit ? 'h-9 w-full rounded-md border-[var(--color-border-strong)] text-sm' : 'h-11 w-full rounded-md border-[var(--color-border-strong)]'}><option value="draft">Nháp</option><option value="worshipping">Đang thờ</option><option value="enshrined">Đã an vị</option><option value="moved">Đã chuyển</option><option value="dedicated">Đã hồi hướng</option><option value="archived">Đã lưu trữ</option></select></label>
+										<label class={addingRelatedSpirit ? 'flex h-9 items-center gap-2 rounded-md border border-[var(--color-border-strong)] px-2 text-xs sm:col-span-2 xl:col-span-1' : 'flex h-11 items-center gap-2 rounded-md border border-[var(--color-border-strong)] px-3 text-sm md:col-span-2'}>
 											<input
 												type="checkbox"
 												checked={(addingRelatedSpirit ? relatedSpiritForm : form).has_urn}
@@ -2705,11 +2749,11 @@
 	</div>{/if}
 
 {#snippet field(label: string, key: keyof SpiritInput, required = false, spirit: SpiritInput = form)}<label
-		><span class="mb-1 block text-sm font-medium">{label}</span><input
+		><span class={addingRelatedSpirit ? 'mb-1 block text-xs font-medium' : 'mb-1 block text-sm font-medium'}>{label}</span><input
 			type={key === 'birth_date' || key === 'death_date' || key === 'entered_worship_area_at' || key === 'enshrined_at' ? 'date' : 'text'}
 			bind:value={spirit[key]}
 			{required}
-			class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
+			class={addingRelatedSpirit ? 'h-9 w-full rounded-md border-[var(--color-border-strong)] text-sm' : 'h-11 w-full rounded-md border-[var(--color-border-strong)]'}
 		/></label
 	>{/snippet}
 
@@ -2718,6 +2762,26 @@
 				>{segment.text}</mark
 			>{:else}{segment.text}{/if}
 	{/each}{/snippet}
+
+{#snippet tabletCardGrid()}<div class="grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-2.5 p-1 sm:grid-cols-[repeat(auto-fill,80px)]">
+		{#each tableSpiritGroups as group (group.key)}{@const first = group.items[0]}<button
+				type="button"
+				onclick={() => canWrite && void edit(first)}
+				disabled={!canWrite}
+				class="h-[80px] text-left enabled:cursor-pointer disabled:cursor-default"
+				title={group.hasTablet ? `Mở Bài vị ${first.tablet_name}` : 'Hương linh chưa xếp Bài vị'}
+			><CardBaiVi
+					code={first.position_name || 'Chưa xếp'}
+					spiritCount={group.items.length}
+					spiritNames={group.items.map((item) => item.full_name)}
+					imageUrl={tabletDisplayImage(group.items)}
+					birthYear={first.birth_year}
+					deathYear={first.death_year}
+					status={first.status === 'draft' ? 'pending' : 'enshrined'}
+					fontSize={9}
+				/></button>
+		{/each}
+	</div>{/snippet}
 
 {#snippet spiritCardGroups()}<div class="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
 		{#each tableSpiritGroups as group (group.key)}<section
@@ -2869,7 +2933,7 @@
 		class="hidden min-h-0 min-w-0 flex-1 overflow-auto rounded-lg border border-[var(--color-border)] bg-[var(--color-surface)] md:block"
 	>
 		<table
-			class="table-fixed text-left text-xs"
+			class="spirit-data-table table-fixed text-left text-xs"
 			style={`width: ${tableWidth}px; min-width: ${tableWidth}px;`}
 		>
 			<colgroup>
@@ -2904,24 +2968,23 @@
 							ondblclick={(event) => openSpiritEditorFromRow(event, item)}
 							class={['hover:bg-[var(--color-primary-soft)]/40', canWrite && 'cursor-default']}
 						>
-							{#if canWrite}<td class="px-3 py-2 align-middle"
-									><div class="flex justify-end gap-1">
+							{#if canWrite && itemIndex === 0}<td rowspan={group.items.length} class="bg-[var(--color-surface-muted)]/35 px-2 py-1 align-middle"
+									><div class="flex justify-center gap-1">
 										<button
 											type="button"
 											onclick={() => void edit(item)}
 											class="grid h-8 w-8 cursor-pointer place-items-center rounded border border-[var(--color-border-strong)]"
-											aria-label={`Sửa ${item.full_name}`}
-											><span class="icon-[lucide--pencil] h-3.5 w-3.5" aria-hidden="true"
-											></span></button
+											aria-label={group.hasTablet ? `Sửa Bài vị ${item.tablet_name}` : `Sửa ${item.full_name}`}
+											><span class="icon-[lucide--pencil] h-3.5 w-3.5" aria-hidden="true"></span></button
 										><button
 											type="button"
-											onclick={() => void remove(item)}
+											onclick={() => void removeTablet(item)}
 											class="grid h-8 w-8 cursor-pointer place-items-center rounded border border-[var(--color-danger)] text-[var(--color-danger)]"
-											aria-label={`Xóa ${item.full_name}`}
-											><span class="icon-[lucide--trash-2] h-3.5 w-3.5" aria-hidden="true"
-											></span></button
+											aria-label={group.hasTablet ? `Xóa Bài vị ${item.tablet_name}` : `Xóa ${item.full_name}`}
+											><span class="icon-[lucide--trash-2] h-3.5 w-3.5" aria-hidden="true"></span></button
 										>
-									</div></td
+									</div>
+									</td
 								>{/if}
 							{#each tableSpiritColumns as column (column.key)}
 								{#if (column.key === 'position_name' && group.hasPosition) || (group.hasTablet && (column.key === 'tablet_name' || column.key === 'tablet_image_url' || column.key === 'house_name'))}
@@ -2930,17 +2993,22 @@
 											class="bg-[var(--color-surface-muted)]/35 px-3 py-2 align-middle font-medium"
 										>
 											{#if column.key === 'tablet_image_url'}<button
-													type="button"
-													onclick={() => openTabletImage(item)}
-													disabled={!item.tablet_image_url}
-													class="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)] disabled:cursor-default"
-													aria-label={`Xem ảnh bài vị ${item.tablet_name}`}
-													><TabletPortrait
-														imageUrl={item.tablet_image_url}
-														name={item.tablet_name}
-														sizeClass="h-[74px] w-[53px]"
-														compact
-													/></button
+												type="button"
+												onclick={() => canWrite && void edit(item)}
+												disabled={!canWrite}
+												class="h-[100px] w-[70px] text-left enabled:cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)] disabled:cursor-default"
+												aria-label={`Mở bài vị ${item.tablet_name}`}
+												><CardBaiVi
+													code={item.position_name || 'Chưa xếp'}
+													spiritCount={group.items.length}
+													spiritNames={group.items.map((spirit) => spirit.full_name)}
+													imageUrl={tabletDisplayImage(group.items)}
+													birthYear={item.birth_year}
+													deathYear={item.death_year}
+													status={item.status === 'draft' ? 'pending' : 'enshrined'}
+													fontSize={9}
+													codeScale={1.35}
+												/></button
 												>{:else}<span class="block w-full truncate" title={item[column.key] || ''}
 													>{@render highlight(item[column.key] || '—')}</span
 												>{/if}
@@ -2952,14 +3020,14 @@
 													onclick={() => openSpiritImage(item)}
 													class="cursor-pointer focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[var(--color-primary)]"
 													aria-label={`Xem ảnh ${item.full_name}`}
-													><SpiritPortrait
-														imageUrl={item.image_url}
-														alt={item.full_name}
-														sizeClass="h-14 w-10"
-														bare
-													/></button
-												>{:else}<span
-													class="grid h-14 w-10 place-items-center border border-amber-400 text-amber-500/45"
+															><SpiritPortrait
+																imageUrl={item.image_url}
+																alt={item.full_name}
+																sizeClass="h-9 w-6"
+																bare
+															/></button
+														>{:else}<span
+															class="grid h-9 w-6 place-items-center border border-amber-400 text-amber-500/45"
 													aria-label={`Chưa có ảnh ${item.full_name}`}
 													><span class="icon-[lucide--user-round] h-5 w-5" aria-hidden="true"
 													></span></span
@@ -3067,3 +3135,13 @@
 			aria-hidden="true"
 		></span></button
 	>{/snippet}
+
+<style>
+	.spirit-data-table :global(th) {
+		padding: .25rem;
+	}
+
+	.spirit-data-table :global(td) {
+		padding: .25rem .375rem;
+	}
+</style>
