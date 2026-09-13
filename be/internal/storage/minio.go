@@ -59,6 +59,8 @@ func (m *MinIO) PresignImage(ctx context.Context, userID, kind, fileName string)
 	folder := "avatars"
 	if kind == "spirit" {
 		folder = "spirits"
+	} else if kind == "urn" {
+		folder = "urns"
 	}
 	key := path.Join(folder, userID, randomID()+"-"+sanitizeFileName(fileName))
 	u, err := m.client.PresignedPutObject(ctx, m.bucket, key, presignExpiry)

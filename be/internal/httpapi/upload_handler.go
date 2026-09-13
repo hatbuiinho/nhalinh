@@ -31,7 +31,7 @@ func (h *UploadHandler) Presign(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid_json", "request body must be valid json")
 		return
 	}
-	if strings.TrimSpace(payload.FileName) == "" || len(payload.FileName) > 255 || (payload.Kind != "avatar" && payload.Kind != "spirit") || !allowedAvatarType(payload.ContentType) {
+	if strings.TrimSpace(payload.FileName) == "" || len(payload.FileName) > 255 || (payload.Kind != "avatar" && payload.Kind != "spirit" && payload.Kind != "urn") || !allowedAvatarType(payload.ContentType) {
 		writeError(w, http.StatusBadRequest, "invalid_input", "Chỉ hỗ trợ ảnh JPEG, PNG hoặc WebP")
 		return
 	}

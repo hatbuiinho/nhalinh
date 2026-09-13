@@ -91,13 +91,20 @@
 
 <div class="flex min-h-0 flex-1 flex-col">
 	<div class="shrink-0 border-b border-[var(--color-border)] pb-3">
+		<div class="mb-3 rounded-md border border-[var(--color-primary)]/30 bg-[var(--color-primary-soft)] p-3 text-sm text-[var(--color-primary-dark)]">
+			<p class="font-semibold">Bước 1: tạo vị trí và mã vị trí tự động</p>
+			<p class="mt-1 text-xs leading-relaxed">
+				Mã có dạng <strong>Số cột + Mã khu + Số hàng</strong>, ví dụ cột 3, khu A, hàng 2 sẽ là <strong>3A-2</strong>.
+				Biểu mẫu này chỉ tạo vị trí; bài vị và Hương linh sẽ được thêm sau từ ô có mã trên sơ đồ.
+			</p>
+		</div>
 		<div
 			class="mb-3 rounded-md border border-[var(--color-border)] bg-[var(--color-surface-muted)] p-3"
 		>
 			<div class="mb-2 flex flex-wrap items-baseline justify-between gap-x-3 gap-y-1">
-				<span class="text-sm font-semibold">Tạo vị trí theo ma trận</span>
+				<span class="text-sm font-semibold">Tạo nhiều vị trí theo sơ đồ lưới</span>
 				<span class="text-xs text-[var(--color-text-secondary)]"
-					>Ví dụ: cột 1–10, hàng 1–5 sẽ tạo 50 vị trí</span
+					>Ví dụ: cột 1–10, hàng 1–5 tạo 50 mã từ 1{areaCode}-1 đến 10{areaCode}-5</span
 				>
 			</div>
 			<div class="grid gap-2 sm:grid-cols-5">

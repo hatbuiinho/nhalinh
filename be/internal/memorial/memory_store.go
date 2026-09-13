@@ -13,17 +13,111 @@ import (
 )
 
 type MemoryStore struct {
-	mu        sync.RWMutex
-	houses    map[string]House
-	members   map[string]map[string]bool
-	areas     map[string]Area
-	positions map[string]Position
-	tablets   map[string]Tablet
-	spirits   map[string]Spirit
+	mu            sync.RWMutex
+	houses        map[string]House
+	members       map[string]map[string]bool
+	areas         map[string]Area
+	positions     map[string]Position
+	tablets       map[string]Tablet
+	spirits       map[string]Spirit
+	urns          map[string]Urn
+	urnHistory    map[string][]UrnHistory
+	spiritHistory map[string][]SpiritPositionHistory
 }
 
 func NewMemoryStore() *MemoryStore {
-	return &MemoryStore{houses: map[string]House{}, members: map[string]map[string]bool{}, areas: map[string]Area{}, positions: map[string]Position{}, tablets: map[string]Tablet{}, spirits: map[string]Spirit{}}
+	return &MemoryStore{houses: map[string]House{}, members: map[string]map[string]bool{}, areas: map[string]Area{}, positions: map[string]Position{}, tablets: map[string]Tablet{}, spirits: map[string]Spirit{}, urns: map[string]Urn{}, urnHistory: map[string][]UrnHistory{}, spiritHistory: map[string][]SpiritPositionHistory{}}
+}
+func (s *MemoryStore) ListUrns(_ context.Context, a Actor) ([]Urn, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	out := []Urn{}
+	for _, v := range s.urns {
+		sp, ok := s.spirits[v.SpiritID]
+		if !ok || sp.DeletedAt != nil {
+			continue
+		}
+		if a.Role != "admin" && !a.AllHouses && !s.members[v.HouseID][a.ID] {
+			continue
+		}
+		v.FullName = sp.FullName
+		v.DharmaName = sp.DharmaName
+		v.BirthYear = sp.BirthYear
+		v.DeathYear = sp.DeathYear
+		out = append(out, v)
+	}
+	return out, nil
+}
+func (s *MemoryStore) GetUrn(ctx context.Context, a Actor, id string) (Urn, error) {
+	items, _ := s.ListUrns(ctx, a)
+	for _, v := range items {
+		if v.ID == id {
+			return v, nil
+		}
+	}
+	return Urn{}, ErrNotFound
+}
+func (s *MemoryStore) CreateUrn(_ context.Context, v Urn) (Urn, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	for _, u := range s.urns {
+		if u.SpiritID == v.SpiritID {
+			return Urn{}, ErrConflict
+		}
+	}
+	s.urns[v.ID] = v
+	sp := s.spirits[v.SpiritID]
+	sp.HasUrn = true
+	s.spirits[v.SpiritID] = sp
+	return v, nil
+}
+func (s *MemoryStore) UpdateUrn(_ context.Context, v Urn) (Urn, error) {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	old, ok := s.urns[v.ID]
+	if !ok {
+		return Urn{}, ErrNotFound
+	}
+	v.CreatedAt = old.CreatedAt
+	s.urns[v.ID] = v
+	return v, nil
+}
+func (s *MemoryStore) DeleteUrn(_ context.Context, id string) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	v, ok := s.urns[id]
+	if !ok {
+		return ErrNotFound
+	}
+	delete(s.urns, id)
+	delete(s.urnHistory, id)
+	sp := s.spirits[v.SpiritID]
+	sp.HasUrn = false
+	s.spirits[v.SpiritID] = sp
+	return nil
+}
+func (s *MemoryStore) ListUrnHistory(_ context.Context, urnID string) ([]UrnHistory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := append([]UrnHistory(nil), s.urnHistory[urnID]...)
+	sort.Slice(items, func(i, j int) bool { return items[i].CreatedAt.After(items[j].CreatedAt) })
+	return items, nil
+}
+func (s *MemoryStore) CreateUrnHistory(_ context.Context, v UrnHistory) error {
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if _, ok := s.urns[v.UrnID]; !ok {
+		return ErrNotFound
+	}
+	s.urnHistory[v.UrnID] = append(s.urnHistory[v.UrnID], v)
+	return nil
+}
+func (s *MemoryStore) ListSpiritPositionHistory(_ context.Context, spiritID string) ([]SpiritPositionHistory, error) {
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	items := append([]SpiritPositionHistory(nil), s.spiritHistory[spiritID]...)
+	sort.Slice(items, func(i, j int) bool { return items[i].ChangedAt.After(items[j].ChangedAt) })
+	return items, nil
 }
 func (s *MemoryStore) ListHouses(_ context.Context, a Actor) ([]House, error) {
 	s.mu.RLock()
@@ -219,7 +313,11 @@ func (s *MemoryStore) ListOccupancyPositions(_ context.Context, _ Actor, houseID
 	out := []Position{}
 	unplaced := 0
 	for _, spirit := range s.spirits {
-		if spirit.DeletedAt == nil && spirit.HouseID == houseID && spirit.TabletID == "" {
+		if spirit.DeletedAt != nil || spirit.HouseID != houseID {
+			continue
+		}
+		tablet, hasTablet := s.tablets[spirit.TabletID]
+		if spirit.TabletID == "" || !hasTablet || tablet.PositionID == "" {
 			unplaced++
 		}
 	}
@@ -505,6 +603,12 @@ func (s *MemoryStore) ListSpirits(_ context.Context, a Actor, o SearchOptions) (
 		if o.Unplaced && v.TabletID != "" {
 			continue
 		}
+		if o.UrnStatus == "yes" && !v.HasUrn {
+			continue
+		}
+		if o.UrnStatus == "no" && v.HasUrn {
+			continue
+		}
 		hay := fold(strings.Join([]string{v.FullName, v.DharmaName, v.BirthYear, v.DeathYear, v.Age, v.BurialPlace, v.Sender, v.SentMonth, v.Notes, v.PositionName, v.TabletName, v.AreaCode, v.HouseName}, " "))
 		if q != "" && !strings.Contains(hay, q) {
 			continue
@@ -636,6 +740,8 @@ func (s *MemoryStore) PatchSpirit(_ context.Context, id, field, value string, up
 		v.SentMonth = value
 	case "notes":
 		v.Notes = value
+	case "has_urn":
+		v.HasUrn = value == "true"
 	default:
 		return ErrInvalidInput
 	}

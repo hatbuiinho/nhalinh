@@ -10,6 +10,7 @@
 	import InlinePositionEditor from '$lib/memorial/InlinePositionEditor.svelte';
 	import PositionMap from '$lib/memorial/PositionMap.svelte';
 	import { memorialRevisionStore } from '$lib/memorial/memorial-revision-store.svelte';
+	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 	import {
 		createArea,
 		createHouse,
@@ -88,7 +89,6 @@
 		movePositionResults = $state<Position[]>([]),
 		mode = $state<Mode>('');
 	let editingPosition = $state<Position | null>(null);
-	let pendingTabletCoordinate = $state<{ rowNumber: number; columnNumber: number } | null>(null);
 	let newPositions = $state<EditablePositionRow[]>([emptyPositionRow()]);
 	let drawerPosition = $state<Position | null>(null);
 	let editingTablet = $state<Tablet | null>(null);
@@ -154,7 +154,10 @@
 	onMount(() => {
 		restorePositionSort();
 		restorePositionView();
+		const onHouseSelect = (event: Event) => { houseId = (event as CustomEvent<string>).detail; void selectHouse(); };
+		window.addEventListener('memorial-house-select', onHouseSelect);
 		void init();
+		return () => window.removeEventListener('memorial-house-select', onHouseSelect);
 	});
 	$effect(() => {
 		const revision = memorialRevisionStore.revision;
@@ -174,7 +177,7 @@
 		loading = true;
 		try {
 			houses = await listHouses();
-			houseId = houses[0]?.id ?? '';
+			houseId = houseFilter.id || houses[0]?.id || '';
 			await selectHouse();
 		} catch (e) {
 			toastStore.error(msg(e));
@@ -365,12 +368,9 @@
 			drawerLoading = false;
 		}
 	}
-	async function openTabletAtEmptyCoordinate(rowNumber: number, columnNumber: number) {
-		await open('tablet');
-		positionId = '';
-		drawerPosition = null;
-		drawerOpen = false;
-		pendingTabletCoordinate = { rowNumber, columnNumber };
+	async function openPositionAtEmptyCoordinate(rowNumber: number, columnNumber: number) {
+		await open('position');
+		newPositions = [{ row_number: String(rowNumber), column_number: String(columnNumber), notes: '' }];
 	}
 	async function open(next: Mode) {
 		mode = next;
@@ -389,7 +389,6 @@
 		}
 		if (next === 'tablet') {
 			editingTablet = null;
-			pendingTabletCoordinate = null;
 			selectedUnplacedSpirits = [];
 			tabletForm = { name: '', image_url: '', sender: '', notes: '', spirits: [emptyInlineSpirit()] };
 		}
@@ -482,28 +481,7 @@
 				await selectPosition();
 				editingPosition = null;
 			} else if (mode === 'tablet') {
-				let targetPositionID = positionId;
-				if (!editingTablet && pendingTabletCoordinate) {
-					const created = await createPositions(areaId, [
-						{
-							row_number: pendingTabletCoordinate.rowNumber,
-							column_number: pendingTabletCoordinate.columnNumber,
-							notes: ''
-						}
-					]);
-					targetPositionID = created.positions[0]?.id ?? '';
-					if (!targetPositionID) {
-						const refreshedPositions = await listPositions(areaId);
-						targetPositionID =
-							refreshedPositions.find(
-								(position) =>
-									position.row_number === pendingTabletCoordinate?.rowNumber &&
-									position.column_number === pendingTabletCoordinate?.columnNumber
-							)?.id ?? '';
-					}
-					if (!targetPositionID) throw new Error('Không thể tạo vị trí cho bài vị');
-					positionId = targetPositionID;
-				}
+				const targetPositionID = positionId;
 				const spirits = tabletForm.spirits.filter((row) =>
 					Object.values(row).some((value) => value.trim())
 				);
@@ -525,7 +503,6 @@
 				areas = await listAreas(houseId);
 				positions = await listPositions(areaId);
 				editingTablet = null;
-				pendingTabletCoordinate = null;
 			}
 			toastStore.success(successMessage);
 			mode = '';
@@ -617,14 +594,7 @@
 >
 	<div class="mx-auto w-full max-w-[1320px] lg:flex lg:min-h-0 lg:flex-1 lg:flex-col">
 		<div class="mb-5 flex shrink-0 flex-wrap gap-2">
-			<select
-				bind:value={houseId}
-				onchange={() => void selectHouse()}
-				class="h-11 min-w-56 rounded-md border-[var(--color-border-strong)]"
-				><option value="">Chọn Nhà Linh</option>{#each houses as h (h.id)}<option value={h.id}
-						>{h.name}</option
-					>{/each}</select
-			>{#if authStore.user?.role === 'admin'}<button
+			{#if authStore.user?.role === 'admin'}<button
 					type="button"
 					onclick={() => void open('house')}
 					class="h-11 rounded-md bg-[var(--color-primary)] px-4 text-sm font-semibold text-white"
@@ -760,7 +730,7 @@
 							onposition={(position) => void openPositionDrawer(position)}
 							onemptyposition={canWrite
 								? ({ rowNumber, columnNumber }) =>
-									void openTabletAtEmptyCoordinate(rowNumber, columnNumber)
+									void openPositionAtEmptyCoordinate(rowNumber, columnNumber)
 								: undefined}
 						/>
 					{:else}<div
@@ -1032,9 +1002,6 @@
 				{:else if mode === 'tablet'}<div
 						class="shrink-0 space-y-3 border-b border-[var(--color-border)] pb-3"
 					>
-						{#if pendingTabletCoordinate}<p class="rounded-md bg-[var(--color-primary-soft)] px-3 py-2 text-sm text-[var(--color-primary-dark)]">
-							Vị trí sẽ được tạo: {pendingTabletCoordinate.columnNumber}{areas.find((area) => area.id === areaId)?.code ?? ''}-{pendingTabletCoordinate.rowNumber}
-						</p>{/if}
 						<div>
 							{#if editingTablet}<p class="mb-3 rounded-md bg-[var(--color-primary-soft)] px-3 py-2 text-sm text-[var(--color-primary-dark)]">Vị trí: {editingTablet.position_name || 'Chưa xếp vị trí'}</p>{/if}
 							<label class="block"

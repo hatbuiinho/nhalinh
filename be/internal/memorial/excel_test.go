@@ -94,6 +94,62 @@ func TestPreviewSpiritImportRejectsInvalidRows(t *testing.T) {
 	}
 }
 
+func TestPreviewSpiritImportRejectsInvalidValuesAndDuplicates(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh Validation"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	file := mustSpiritImportWorkbook(t,
+		[]string{"Nguyễn Văn A", "", "2026", "2025", "", "", "", "", "", "", "38D-10", ""},
+		[]string{"Nguyễn Văn B", "", "1980", "", "hai mươi", "", "", "", "13/2026", "", "38D-11", ""},
+		[]string{"Nguyễn Văn C", "", "1980", "", "", "ftp://example.com/image.jpg", "", "", "", "", "38D-12", ""},
+		[]string{"Nguyễn Văn D", "", "1980", "", "", "", "", "", "", "", "38D-13", ""},
+		[]string{"Nguyễn Văn D", "", "1980", "", "", "", "", "", "", "", "38D-13", ""},
+	)
+
+	preview, err := service.PreviewSpiritImport(ctx, admin, house.ID, file)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ValidRows != 1 || preview.InvalidRows != 4 {
+		t.Fatalf("unexpected validation preview: %#v", preview)
+	}
+	if _, err := service.ImportSpirits(ctx, admin, house.ID, file); err == nil {
+		t.Fatal("expected invalid import to be rejected atomically")
+	}
+
+	valid := mustSpiritImportWorkbook(t,
+		[]string{"Nguyễn Văn E", "", "1980", "", "46", "https://example.com/image.jpg", "", "", "08/2026", "", "38D-14", ""},
+	)
+	if _, err := service.ImportSpirits(ctx, admin, house.ID, valid); err != nil {
+		t.Fatal(err)
+	}
+	preview, err = service.PreviewSpiritImport(ctx, admin, house.ID, valid)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if preview.ValidRows != 0 || preview.InvalidRows != 1 {
+		t.Fatalf("expected existing record to be rejected: %#v", preview)
+	}
+}
+
+func TestPreviewSpiritImportRejectsHeaderOnlyWorkbook(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh Empty Import"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	_, err = service.PreviewSpiritImport(ctx, admin, house.ID, mustSpiritImportWorkbook(t))
+	if err == nil || !Is(err, ErrInvalidInput) {
+		t.Fatalf("expected header-only workbook to fail, got %v", err)
+	}
+}
+
 func TestExportSpiritsRespectsScope(t *testing.T) {
 	ctx := context.Background()
 	service := NewService(NewMemoryStore(), func() time.Time {

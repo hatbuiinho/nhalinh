@@ -68,6 +68,8 @@ func NewRouter(
 	protected.Handle("/api/spirits", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Spirits)))
 	protected.Handle("/api/spirits/batch", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.SpiritsBatch)))
 	protected.Handle("/api/spirits/", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Spirit)))
+	protected.Handle("/api/urns", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Urns)))
+	protected.Handle("/api/urns/", requirePermission(user.PermissionMemorialRead, http.HandlerFunc(memorialHandler.Urn)))
 	protected.HandleFunc("/api/devices", deviceHandler.Collection)
 	mux.Handle("/api/", requireAuth(users, protected))
 	mux.HandleFunc("/api/app-updates/android/latest", otaHandler.AndroidLatest)

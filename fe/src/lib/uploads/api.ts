@@ -14,7 +14,10 @@ export async function uploadAvatar(file: File): Promise<string> {
 export async function uploadSpiritImage(file: File): Promise<string> {
 	return uploadImage(file, 'spirit');
 }
-async function uploadImage(file: File, kind: 'avatar' | 'spirit'): Promise<string> {
+export async function uploadUrnImage(file: File): Promise<string> {
+	return uploadImage(file, 'urn');
+}
+async function uploadImage(file: File, kind: 'avatar' | 'spirit' | 'urn'): Promise<string> {
 	const presigned = await apiRequest<PresignedUpload>('/api/uploads/presign', {
 		method: 'POST',
 		body: JSON.stringify({ file_name: file.name, content_type: file.type, kind })

@@ -4,17 +4,24 @@
 	import OccupancyStatistics from '$lib/memorial/OccupancyStatistics.svelte';
 	import { listHouses, type House } from '$lib/memorial/api';
 	import { toastStore } from '$lib/ui/toast-store.svelte';
+	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 
 	let houses = $state<House[]>([]),
 		houseId = $state(''),
 		loading = $state(true);
 
-	onMount(() => void initialize());
+	onMount(() => {
+		const onHouseSelect = (event: Event) => { houseId = (event as CustomEvent<string>).detail || houses[0]?.id || ''; };
+		window.addEventListener('memorial-house-select', onHouseSelect);
+		void initialize();
+		return () => window.removeEventListener('memorial-house-select', onHouseSelect);
+	});
 	async function initialize() {
 		loading = true;
 		try {
 			houses = await listHouses();
-			houseId = houses[0]?.id ?? '';
+			houseId = houseFilter.id || houses[0]?.id || '';
+			if (!houseFilter.id) houseFilter.id = houseId;
 		} catch (error) {
 			toastStore.error(error instanceof Error ? error.message : 'Không thể tải thống kê');
 		} finally {
@@ -32,17 +39,6 @@
 					Tổng quan vị trí, bài vị và Hương linh theo khu vực.
 				</p>
 			</div>
-			{#if houses.length > 1}<label class="block min-w-56">
-					<span class="mb-1 block text-xs font-medium text-[var(--color-text-secondary)]"
-						>Nhà Linh</span
-					>
-					<select
-						bind:value={houseId}
-						class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
-					>
-						{#each houses as house (house.id)}<option value={house.id}>{house.name}</option>{/each}
-					</select>
-				</label>{/if}
 		</div>
 		{#if loading}<div class="py-20"><LoadingIndicator label="Đang tải Nhà Linh..." /></div>
 		{:else if houses.length === 0}<div

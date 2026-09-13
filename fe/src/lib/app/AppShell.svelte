@@ -4,6 +4,7 @@
 	import { router } from '$lib/navigation/router.svelte';
 	import LoginScreen from '$lib/screens/LoginScreen.svelte';
 	import MemorialScreen from '$lib/screens/MemorialScreen.svelte';
+	import UrnsScreen from '$lib/screens/UrnsScreen.svelte';
 	import StructureScreen from '$lib/screens/StructureScreen.svelte';
 	import StatisticsScreen from '$lib/screens/StatisticsScreen.svelte';
 	import UsersScreen from '$lib/screens/UsersScreen.svelte';
@@ -18,17 +19,23 @@
 	import TopBar from './TopBar.svelte';
 	import ChangePasswordPopup from '$lib/auth/ChangePasswordPopup.svelte';
 	import { parseRoute, routePermission } from '$lib/navigation/routes';
+	import { listHouses } from '$lib/memorial/api';
+	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 
 	let requestedRoute = $derived(router.current);
 	let requestedPermission = $derived(routePermission(requestedRoute));
 	let routeAllowed = $derived(!requestedPermission || authStore.can(requestedPermission));
 	let route = $derived(routeAllowed ? requestedRoute : parseRoute('/memorial'));
 	let memorialMounted = $state(false);
+	let urnsMounted = $state(false);
 	let structureMounted = $state(false);
 	let statisticsMounted = $state(false);
 	let usersMounted = $state(false);
 	let profileMounted = $state(false);
 	let sidebarCollapsed = $state(false);
+	let houseSelectionReady = $state(false);
+	let houseSelectionUserID = $state('');
+	const selectedHouseStorageKey = 'nhalinh:selected-house-id';
 
 	onMount(async () => {
 		router.init();
@@ -43,12 +50,41 @@
 	onDestroy(() => router.destroy());
 
 	$effect(() => {
+		const userID = authStore.user?.id ?? '';
+		if (!userID) {
+			houseSelectionReady = false;
+			houseSelectionUserID = '';
+			return;
+		}
+		if (houseSelectionUserID === userID) return;
+		houseSelectionUserID = userID;
+		houseSelectionReady = false;
+		void initializeHouseSelection(userID);
+	});
+
+	async function initializeHouseSelection(userID: string) {
+		try {
+			const houses = await listHouses();
+			if (authStore.user?.id !== userID) return;
+			const savedID = localStorage.getItem(selectedHouseStorageKey) ?? '';
+			const preferredID = houseFilter.id || savedID;
+			houseFilter.id = houses.some((house) => house.id === preferredID)
+				? preferredID
+				: (houses[0]?.id ?? '');
+			if (houseFilter.id) localStorage.setItem(selectedHouseStorageKey, houseFilter.id);
+		} finally {
+			if (authStore.user?.id === userID) houseSelectionReady = true;
+		}
+	}
+
+	$effect(() => {
 		if (authStore.user && !routeAllowed) router.replace('/memorial');
 	});
 
 	$effect(() => {
 		if (!authStore.user) {
 			memorialMounted = false;
+			urnsMounted = false;
 			structureMounted = false;
 			statisticsMounted = false;
 			usersMounted = false;
@@ -58,6 +94,9 @@
 		switch (route.name) {
 			case 'memorial':
 				memorialMounted = true;
+				break;
+			case 'urns':
+				urnsMounted = true;
 				break;
 			case 'structure':
 				structureMounted = true;
@@ -84,7 +123,7 @@
 	}
 </script>
 
-{#if authStore.initializing}
+{#if authStore.initializing || (authStore.user && !houseSelectionReady)}
 	<div class="grid min-h-screen place-items-center">
 		<LoadingIndicator label="Đang khởi động..." />
 	</div>
@@ -100,6 +139,9 @@
 			<section class="relative min-h-0 flex-1 overflow-hidden">
 				{#if memorialMounted}<div class="h-full" class:hidden={route.name !== 'memorial'}>
 						<MemorialScreen />
+					</div>{/if}
+				{#if urnsMounted}<div class="h-full" class:hidden={route.name !== 'urns'}>
+						<UrnsScreen />
 					</div>{/if}
 				{#if structureMounted}<div class="h-full" class:hidden={route.name !== 'structure'}>
 						<StructureScreen />
@@ -126,7 +168,12 @@
 	onClose={() => toastStore.close()}
 />
 <ChangePasswordPopup />
-<Popup open={popupStore.open} title={popupStore.title} onClose={() => popupStore.cancel()}>
+<Popup
+	open={popupStore.open}
+	title={popupStore.title}
+	layerClass="z-[60]"
+	onClose={() => popupStore.cancel()}
+>
 	<p class="text-sm leading-6 text-[var(--color-text-secondary)]">{popupStore.message}</p>
 	{#snippet footer()}
 		<div class="grid grid-cols-2 gap-3">

@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"fmt"
+	"net/url"
 	"regexp"
 	"sort"
 	"strconv"
@@ -16,6 +17,8 @@ import (
 const (
 	maxSpiritImportRows   = 5000
 	maxSpiritImportErrors = 100
+	maxImportNameLength   = 200
+	maxImportTextLength   = 1000
 )
 
 var (
@@ -34,6 +37,8 @@ var (
 		"Bài vị",
 	}
 	positionPattern = regexp.MustCompile(`^(\d+)([A-Z]+)-(\d+)$`)
+	yearPattern     = regexp.MustCompile(`^\d{4}$`)
+	monthPattern    = regexp.MustCompile(`^(0[1-9]|1[0-2])/(\d{4})$`)
 )
 
 type spiritImportRow struct {
@@ -368,13 +373,30 @@ func (s *Service) planSpiritImport(ctx context.Context, actor Actor, houseID str
 	if err != nil {
 		return spiritImportPlan{}, err
 	}
+	existingKeys, err := s.existingSpiritImportKeys(ctx, actor, houseID)
+	if err != nil {
+		return spiritImportPlan{}, err
+	}
 	preview := SpiritImportPreview{TotalRows: len(rows), Errors: []SpiritImportIssue{}}
 	plannedRows := make([]spiritImportPlanRow, 0, len(rows))
+	seenKeys := make(map[string]struct{}, len(rows))
 	for _, row := range rows {
 		planned, rowErr := buildSpiritImportPlanRow(houseID, row)
 		if rowErr != nil {
 			preview.InvalidRows++
 			appendSpiritImportError(&preview, row.rowNumber, rowErr.Error())
+			continue
+		}
+		key := spiritImportIdentity(planned)
+		if _, exists := seenKeys[key]; exists {
+			preview.InvalidRows++
+			appendSpiritImportError(&preview, row.rowNumber, "bản ghi trùng với một dòng khác trong file")
+			continue
+		}
+		seenKeys[key] = struct{}{}
+		if _, exists := existingKeys[key]; exists {
+			preview.InvalidRows++
+			appendSpiritImportError(&preview, row.rowNumber, "bản ghi đã tồn tại trong Nhà Linh này")
 			continue
 		}
 		if planned.hasPosition {
@@ -413,6 +435,9 @@ func buildSpiritImportPlanRow(houseID string, row spiritImportRow) (spiritImport
 	fullName := strings.TrimSpace(row.fullName)
 	if fullName == "" {
 		return spiritImportPlanRow{}, fmt.Errorf("họ tên là bắt buộc")
+	}
+	if err := validateSpiritImportValues(row); err != nil {
+		return spiritImportPlanRow{}, err
 	}
 	tabletName := strings.TrimSpace(row.tablet)
 	if tabletName == "" {
@@ -641,7 +666,112 @@ func parseSpiritImportRows(raw []byte) ([]spiritImportRow, error) {
 		}
 		items = append(items, item)
 	}
+	if len(items) == 0 {
+		return nil, fmt.Errorf("%w: file excel không có dòng dữ liệu", ErrInvalidInput)
+	}
 	return items, nil
+}
+
+func validateSpiritImportValues(row spiritImportRow) error {
+	if err := validateImportText("họ tên", row.fullName, maxImportNameLength); err != nil {
+		return err
+	}
+	for _, field := range []struct{ label, value string }{
+		{"pháp danh", row.dharmaName},
+		{"ảnh URL", row.imageURL},
+		{"nơi an táng", row.burialPlace},
+		{"người gửi", row.sender},
+		{"ghi chú", row.notes},
+		{"bài vị", row.tablet},
+	} {
+		if err := validateImportText(field.label, field.value, maxImportTextLength); err != nil {
+			return err
+		}
+	}
+	birthYear, err := validateImportYear("năm sinh", row.birthYear)
+	if err != nil {
+		return err
+	}
+	deathYear, err := validateImportYear("năm mất", row.deathYear)
+	if err != nil {
+		return err
+	}
+	if birthYear > 0 && deathYear > 0 && birthYear > deathYear {
+		return fmt.Errorf("năm sinh không được lớn hơn năm mất")
+	}
+	if age := strings.TrimSpace(row.age); age != "" {
+		value, parseErr := strconv.Atoi(age)
+		if parseErr != nil || value < 0 || value > 200 {
+			return fmt.Errorf("tuổi phải là số nguyên từ 0 đến 200")
+		}
+	}
+	if month := strings.TrimSpace(row.sentMonth); month != "" && !monthPattern.MatchString(month) {
+		return fmt.Errorf("tháng gửi phải theo định dạng MM/YYYY")
+	}
+	if imageURL := strings.TrimSpace(row.imageURL); imageURL != "" {
+		parsed, parseErr := url.ParseRequestURI(imageURL)
+		if parseErr != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") || parsed.Host == "" {
+			return fmt.Errorf("ảnh URL phải là địa chỉ http hoặc https hợp lệ")
+		}
+	}
+	return nil
+}
+
+func validateImportText(label, value string, maxLength int) error {
+	if len([]rune(strings.TrimSpace(value))) > maxLength {
+		return fmt.Errorf("%s không được vượt quá %d ký tự", label, maxLength)
+	}
+	return nil
+}
+
+func validateImportYear(label, raw string) (int, error) {
+	value := strings.TrimSpace(raw)
+	if value == "" {
+		return 0, nil
+	}
+	if !yearPattern.MatchString(value) {
+		return 0, fmt.Errorf("%s phải gồm đúng 4 chữ số", label)
+	}
+	year, err := strconv.Atoi(value)
+	if err != nil || year < 1 {
+		return 0, fmt.Errorf("%s không hợp lệ", label)
+	}
+	return year, nil
+}
+
+func spiritImportIdentity(row spiritImportPlanRow) string {
+	position, tablet := "", ""
+	if row.hasPosition {
+		position = fmt.Sprintf("%d%s-%d", row.columnNumber, row.areaCode, row.rowNumber)
+		tablet = row.tabletName
+	}
+	return normalizedImportIdentity(row.input.FullName, row.input.DharmaName, row.input.BirthYear, row.input.DeathYear, position, tablet)
+}
+
+func normalizedImportIdentity(fullName, dharmaName, birthYear, deathYear, position, tablet string) string {
+	parts := []string{fullName, dharmaName, birthYear, deathYear, position, tablet}
+	for index, part := range parts {
+		parts[index] = fold(strings.TrimSpace(part))
+	}
+	return strings.Join(parts, "|")
+}
+
+func (s *Service) existingSpiritImportKeys(ctx context.Context, actor Actor, houseID string) (map[string]struct{}, error) {
+	keys := map[string]struct{}{}
+	options := SearchOptions{HouseID: houseID, Limit: 500}
+	for {
+		items, total, err := s.ListSpirits(ctx, actor, options)
+		if err != nil {
+			return nil, err
+		}
+		for _, item := range items {
+			keys[normalizedImportIdentity(item.FullName, item.DharmaName, item.BirthYear, item.DeathYear, item.PositionName, item.TabletName)] = struct{}{}
+		}
+		options.Offset += len(items)
+		if len(items) == 0 || options.Offset >= total {
+			return keys, nil
+		}
+	}
 }
 
 func isSpiritImportRowEmpty(row spiritImportRow) bool {

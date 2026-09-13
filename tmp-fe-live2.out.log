@@ -1,0 +1,9 @@
+yarn run v1.22.22
+$ vite dev --host 0.0.0.0
+Port 5173 is in use, trying another one...
+
+  VITE v8.2.0  ready in 967 ms
+
+  ➜  Local:   http://localhost:5174/
+  ➜  Network: http://192.168.10.174:5174/  Ethernet
+info Visit https://yarnpkg.com/en/docs/cli/run for documentation about this command.

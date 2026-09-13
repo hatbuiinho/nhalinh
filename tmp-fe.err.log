@@ -1,0 +1,209 @@
+7:02:39 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+7:34:14 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+7:43:01 PM [vite] (client) Pre-transform error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] [0mExpected `,` or `}` but found `Identifier`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/lib/memorial/sheet-parser.ts:29:3 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m18 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m{
+ [38;5;240m   │[0m            ┬  
+ [38;5;240m   │[0m            ╰── Opened here
+ [38;5;240m   │[0m 
+ [38;5;246m29 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0mhas_urn[38;5;249m:[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m
+ [38;5;240m   │[0m        ───┬───  
+ [38;5;240m   │[0m           ╰───── `,` or `}` expected
+[38;5;246m────╯[0m
+
+  Plugin: vite:oxc
+  File: F:/Code/nhalinh/fe/src/lib/memorial/sheet-parser.ts
+7:43:01 PM [vite] (client) Pre-transform error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] [0mExpected `,` or `}` but found `Identifier`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/lib/memorial/sheet-parser.ts:29:3 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m18 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m{
+ [38;5;240m   │[0m            ┬  
+ [38;5;240m   │[0m            ╰── Opened here
+ [38;5;240m   │[0m 
+ [38;5;246m29 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0mhas_urn[38;5;249m:[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m
+ [38;5;240m   │[0m        ───┬───  
+ [38;5;240m   │[0m           ╰───── `,` or `}` expected
+[38;5;246m────╯[0m
+
+  Plugin: vite:oxc
+  File: F:/Code/nhalinh/fe/src/lib/memorial/sheet-parser.ts
+7:43:01 PM [vite] (client) Pre-transform error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] [0mExpected `,` or `}` but found `Identifier`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/lib/memorial/sheet-parser.ts:29:3 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m18 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m{
+ [38;5;240m   │[0m            ┬  
+ [38;5;240m   │[0m            ╰── Opened here
+ [38;5;240m   │[0m 
+ [38;5;246m29 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0mhas_urn[38;5;249m:[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m
+ [38;5;240m   │[0m        ───┬───  
+ [38;5;240m   │[0m           ╰───── `,` or `}` expected
+[38;5;246m────╯[0m
+
+  Plugin: vite:oxc
+  File: F:/Code/nhalinh/fe/src/lib/memorial/sheet-parser.ts
+7:43:01 PM [vite] Internal server error: Transform failed with 1 error:
+
+[31m[PARSE_ERROR] [0mExpected `,` or `}` but found `Identifier`
+    [38;5;246m╭[0m[38;5;246m─[0m[38;5;246m[[0m src/lib/memorial/sheet-parser.ts:29:3 [38;5;246m][0m
+    [38;5;246m│[0m
+ [38;5;246m18 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249mr[0m[38;5;249me[0m[38;5;249mt[0m[38;5;249mu[0m[38;5;249mr[0m[38;5;249mn[0m[38;5;249m [0m{
+ [38;5;240m   │[0m            ┬  
+ [38;5;240m   │[0m            ╰── Opened here
+ [38;5;240m   │[0m 
+ [38;5;246m29 │[0m [38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0m[38;5;249m [0mhas_urn[38;5;249m:[0m[38;5;249m [0m[38;5;249mf[0m[38;5;249ma[0m[38;5;249ml[0m[38;5;249ms[0m[38;5;249me[0m
+ [38;5;240m   │[0m        ───┬───  
+ [38;5;240m   │[0m           ╰───── `,` or `}` expected
+[38;5;246m────╯[0m
+
+  Plugin: vite:oxc
+  File: F:/Code/nhalinh/fe/src/lib/memorial/sheet-parser.ts
+      at transformWithOxc (file:///F:/Code/nhalinh/fe/node_modules/vite/dist/node/chunks/node.js:4090:19)
+      at TransformPluginContext.transform (file:///F:/Code/nhalinh/fe/node_modules/vite/dist/node/chunks/node.js:4161:26)
+      at EnvironmentPluginContainer.transform (file:///F:/Code/nhalinh/fe/node_modules/vite/dist/node/chunks/node.js:30796:51)
+      at async loadAndTransform (file:///F:/Code/nhalinh/fe/node_modules/vite/dist/node/chunks/node.js:20594:26)
+      at async viteTransformMiddleware (file:///F:/Code/nhalinh/fe/node_modules/vite/dist/node/chunks/node.js:25092:20)
+7:43:01 PM [vite] (client) [console.error] [vite] Failed to reload /src/lib/memorial/InlineSpiritEditor.svelte. This could be due to syntax errors or importing non-existent modules. (see errors above)
+7:43:01 PM [vite] (client) [console.error] [vite] Failed to reload /src/lib/screens/StructureScreen.svelte. This could be due to syntax errors or importing non-existent modules. (see errors above)
+7:43:01 PM [vite] (client) [console.error] [vite] Failed to reload /src/lib/screens/MemorialScreen.svelte. This could be due to syntax errors or importing non-existent modules. (see errors above)
+7:43:01 PM [vite] (client) [Unhandled rejection] TypeError: Cannot read properties of undefined (reading 'default')
+ > src/lib/screens/MemorialScreen.svelte?t=1788957774532:6064:39
+ > ../../../@vite/client:67:58
+ > ../../../@vite/client:217:52
+ > ../../../@vite/client:195:55
+ > HMRClient.queueUpdate ../../../@vite/client:195:33
+ > handleMessage ../../../@vite/client:972:4
+
+7:44:37 PM [vite] (client) Pre-transform error: src/lib/screens/MemorialScreen.svelte:2541:12 Can only bind to an Identifier or MemberExpression or a `{get, set}` pair
+https://svelte.dev/e/bind_invalid_expression
+  Plugin: vite-plugin-svelte:compile
+  File: src/lib/screens/MemorialScreen.svelte:2541:12
+   2539 |                        <input
+   2540 |                          type="checkbox"
+   2541 |                          bind:checked={(addingRelatedSpirit ? relatedSpiritForm : form).has_urn}
+                                                                                                          ^
+   2542 |                          class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]"
+   2543 |                        />
+7:44:37 PM [vite] Internal server error: src/lib/screens/MemorialScreen.svelte:2541:12 Can only bind to an Identifier or MemberExpression or a `{get, set}` pair
+https://svelte.dev/e/bind_invalid_expression
+  Plugin: vite-plugin-svelte:compile
+  File: src/lib/screens/MemorialScreen.svelte:2541:12
+   2539 |                        <input
+   2540 |                          type="checkbox"
+   2541 |                          bind:checked={(addingRelatedSpirit ? relatedSpiritForm : form).has_urn}
+                                                                                                          ^
+   2542 |                          class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]"
+   2543 |                        />
+7:44:37 PM [vite] (client) [console.warn] The next HMR update will cause the page to reload
+7:44:37 PM [vite] (client) [console.error] TypeError: Failed to fetch dynamically imported module: http://localhost:5173/.svelte-kit/generated/client/nodes/3.js?t=1788957876032
+7:45:29 PM [vite] (client) Pre-transform error: src/lib/screens/MemorialScreen.svelte:2541:12 Can only bind to an Identifier or MemberExpression or a `{get, set}` pair
+https://svelte.dev/e/bind_invalid_expression
+  Plugin: vite-plugin-svelte:compile
+  File: src/lib/screens/MemorialScreen.svelte:2541:12
+   2539 |                        <input
+   2540 |                          type="checkbox"
+   2541 |                          bind:checked={(addingRelatedSpirit ? relatedSpiritForm : form).has_urn}
+                                                                                                          ^
+   2542 |                          class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]"
+   2543 |                        />
+7:45:29 PM [vite] Internal server error: src/lib/screens/MemorialScreen.svelte:2541:12 Can only bind to an Identifier or MemberExpression or a `{get, set}` pair
+https://svelte.dev/e/bind_invalid_expression
+  Plugin: vite-plugin-svelte:compile
+  File: src/lib/screens/MemorialScreen.svelte:2541:12
+   2539 |                        <input
+   2540 |                          type="checkbox"
+   2541 |                          bind:checked={(addingRelatedSpirit ? relatedSpiritForm : form).has_urn}
+                                                                                                          ^
+   2542 |                          class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]"
+   2543 |                        />
+7:45:29 PM [vite] (client) [console.warn] The next HMR update will cause the page to reload
+7:45:29 PM [vite] (client) [console.error] TypeError: Failed to fetch dynamically imported module: http://localhost:5173/.svelte-kit/generated/client/nodes/3.js?t=1788957928977
+7:58:56 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'length')
+ > parseRoute src/lib/navigation/routes.ts:28:23
+    26 |  ];
+    27 |  export function parseRoute(pathname: string): AppRoute {
+    28 |  	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+       |                         ^
+    29 |  	if (path === '/' || path === '/memorial')
+    30 |  		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+ > AppRouter.push src/lib/navigation/router.svelte.ts:40:16
+ > AppRouter.openMain src/lib/navigation/router.svelte.ts:70:7
+ > HTMLButtonElement.click src/lib/app/DesktopSidebar.svelte:94:26
+ > HTMLDivElement.handle_event_propagation node_modules/svelte/src/internal/client/dom/elements/events.js:273:15
+
+7:58:57 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'length')
+ > parseRoute src/lib/navigation/routes.ts:28:23
+    26 |  ];
+    27 |  export function parseRoute(pathname: string): AppRoute {
+    28 |  	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+       |                         ^
+    29 |  	if (path === '/' || path === '/memorial')
+    30 |  		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+ > AppRouter.push src/lib/navigation/router.svelte.ts:40:16
+ > AppRouter.openMain src/lib/navigation/router.svelte.ts:70:7
+ > HTMLButtonElement.click src/lib/app/DesktopSidebar.svelte:94:26
+ > HTMLDivElement.handle_event_propagation node_modules/svelte/src/internal/client/dom/elements/events.js:273:15
+
+7:58:58 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'length')
+ > parseRoute src/lib/navigation/routes.ts:28:23
+    26 |  ];
+    27 |  export function parseRoute(pathname: string): AppRoute {
+    28 |  	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+       |                         ^
+    29 |  	if (path === '/' || path === '/memorial')
+    30 |  		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+ > AppRouter.push src/lib/navigation/router.svelte.ts:40:16
+ > AppRouter.openMain src/lib/navigation/router.svelte.ts:70:7
+ > HTMLButtonElement.click src/lib/app/DesktopSidebar.svelte:94:26
+ > HTMLDivElement.handle_event_propagation node_modules/svelte/src/internal/client/dom/elements/events.js:273:15
+
+7:58:58 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'length')
+ > parseRoute src/lib/navigation/routes.ts:28:23
+    26 |  ];
+    27 |  export function parseRoute(pathname: string): AppRoute {
+    28 |  	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+       |                         ^
+    29 |  	if (path === '/' || path === '/memorial')
+    30 |  		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+ > AppRouter.push src/lib/navigation/router.svelte.ts:40:16
+ > AppRouter.openMain src/lib/navigation/router.svelte.ts:70:7
+ > HTMLButtonElement.click src/lib/app/DesktopSidebar.svelte:94:26
+ > HTMLDivElement.handle_event_propagation node_modules/svelte/src/internal/client/dom/elements/events.js:273:15
+
+7:58:59 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'length')
+ > parseRoute src/lib/navigation/routes.ts:28:23
+    26 |  ];
+    27 |  export function parseRoute(pathname: string): AppRoute {
+    28 |  	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+       |                         ^
+    29 |  	if (path === '/' || path === '/memorial')
+    30 |  		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+ > AppRouter.push src/lib/navigation/router.svelte.ts:40:16
+ > AppRouter.openMain src/lib/navigation/router.svelte.ts:70:7
+ > HTMLButtonElement.click src/lib/app/DesktopSidebar.svelte:94:26
+ > HTMLDivElement.handle_event_propagation node_modules/svelte/src/internal/client/dom/elements/events.js:273:15
+
+7:58:59 PM [vite] (client) [Unhandled error] TypeError: Cannot read properties of undefined (reading 'length')
+ > parseRoute src/lib/navigation/routes.ts:28:23
+    26 |  ];
+    27 |  export function parseRoute(pathname: string): AppRoute {
+    28 |  	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
+       |                         ^
+    29 |  	if (path === '/' || path === '/memorial')
+    30 |  		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+ > AppRouter.push src/lib/navigation/router.svelte.ts:40:16
+ > AppRouter.openMain src/lib/navigation/router.svelte.ts:70:7
+ > HTMLButtonElement.click src/lib/app/DesktopSidebar.svelte:94:26
+ > HTMLDivElement.handle_event_propagation node_modules/svelte/src/internal/client/dom/elements/events.js:273:15
+
+8:02:19 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+8:10:22 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+8:10:45 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+8:13:15 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+8:19:03 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.

@@ -1,0 +1,106 @@
+yarn run v1.22.22
+$ vite dev --host 127.0.0.1
+
+  VITE v8.2.0  ready in 4569 ms
+
+  ➜  Local:   http://127.0.0.1:5173/
+9:25:23 AM [vite] (client) hmr update /src/lib/memorial/PositionMap.svelte, /src/routes/layout.css
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:25:35 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:25:35 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:25:35 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:25:35 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:25:35 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:27:10 AM [vite] (client) hmr update /src/lib/screens/StructureScreen.svelte, /src/routes/layout.css
+9:27:10 AM [vite] (client) hmr update /src/lib/memorial/PositionMap.svelte, /src/routes/layout.css
+9:27:30 AM [vite] (client) hmr update /src/lib/screens/StructureScreen.svelte, /src/routes/layout.css
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:27:34 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:27:34 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:27:34 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:27:34 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:27:34 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:30:53 AM [vite] (client) hmr update /src/lib/memorial/InlinePositionEditor.svelte, /src/routes/layout.css
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:30:58 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:30:58 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:30:58 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:30:58 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:30:58 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:35:22 AM [vite] (client) hmr update /src/lib/app/DesktopSidebar.svelte, /src/routes/layout.css
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:35:27 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:35:27 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:35:27 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:35:28 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:35:28 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:48:38 AM [vite] (client) hmr update /src/lib/app/DesktopSidebar.svelte, /src/routes/layout.css
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:48:43 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:48:43 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:48:43 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:48:43 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:48:43 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:52:55 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+9:52:55 AM [vite] (client) hmr update /src/lib/app/AppShell.svelte, /src/routes/layout.css
+9:53:13 AM [vite] (client) hmr update /src/lib/screens/UrnsScreen.svelte, /src/routes/layout.css
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:53:22 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:53:22 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:53:22 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:53:22 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:53:22 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:53:36 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:53:40 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:53:40 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:53:40 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:53:40 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:53:40 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte
+9:56:42 AM [vite] (client) hmr update /src/lib/screens/MemorialScreen.svelte, /src/routes/layout.css
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/0.js
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/1.js
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/2.js
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/client/app.js
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/client/nodes/3.js
+9:56:46 AM [vite] (ssr) page reload .svelte-kit/generated/shared/error-template.js
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/client/matchers.js
+9:56:46 AM [vite] (ssr) page reload .svelte-kit/generated/server/internal.js
+9:56:46 AM [vite] (client) page reload .svelte-kit/generated/root.js
+9:56:46 AM [vite] (ssr) page reload .svelte-kit/generated/root.js
+9:56:46 AM [vite] (ssr) page reload .svelte-kit/generated/root.svelte

@@ -20,6 +20,82 @@ func NewService(store Store, now func() time.Time) *Service { return &Service{st
 func (s *Service) ListHouses(ctx context.Context, actor Actor) ([]House, error) {
 	return s.store.ListHouses(ctx, actor)
 }
+func (s *Service) ListUrns(ctx context.Context, actor Actor) ([]Urn, error) {
+	return s.store.ListUrns(ctx, actor)
+}
+func (s *Service) ListUrnHistory(ctx context.Context, actor Actor, urnID string) ([]UrnHistory, error) {
+	if _, err := s.store.GetUrn(ctx, actor, urnID); err != nil {
+		return nil, err
+	}
+	return s.store.ListUrnHistory(ctx, urnID)
+}
+func (s *Service) SaveUrn(ctx context.Context, actor Actor, id string, in UrnInput) (Urn, error) {
+	if in.Status == "" {
+		in.Status = "installed"
+	}
+	if in.Status != "installed" && in.Status != "moved" && in.Status != "returned" {
+		return Urn{}, fmt.Errorf("%w: invalid urn status", ErrInvalidInput)
+	}
+	if in.Status == "moved" && (strings.TrimSpace(in.MovedAt) == "" || strings.TrimSpace(in.StorageLocation) == "") {
+		return Urn{}, fmt.Errorf("%w: moved urn requires moved_at and storage_location", ErrInvalidInput)
+	}
+	if id != "" {
+		current, e := s.store.GetUrn(ctx, actor, id)
+		if e != nil {
+			return Urn{}, e
+		}
+		if e = s.requireWrite(ctx, actor, current.HouseID); e != nil {
+			return Urn{}, e
+		}
+		target := current.SpiritID
+		house := current.HouseID
+		if strings.TrimSpace(in.SpiritID) != "" && in.SpiritID != current.SpiritID {
+			spirit, err := s.GetSpirit(ctx, actor, in.SpiritID)
+			if err != nil {
+				return Urn{}, err
+			}
+			if err = s.requireWrite(ctx, actor, spirit.HouseID); err != nil {
+				return Urn{}, err
+			}
+			target, house = spirit.ID, spirit.HouseID
+		}
+		next, err := s.store.UpdateUrn(ctx, Urn{ID: id, SpiritID: target, HouseID: house, Code: strings.TrimSpace(in.Code), UrnType: strings.TrimSpace(in.UrnType), Material: strings.TrimSpace(in.Material), Color: strings.TrimSpace(in.Color), Dimensions: strings.TrimSpace(in.Dimensions), StorageLocation: strings.TrimSpace(in.StorageLocation), InstalledAt: in.InstalledAt, MovedAt: in.MovedAt, ImageURL: strings.TrimSpace(in.ImageURL), Status: in.Status, Notes: strings.TrimSpace(in.Notes), UpdatedAt: s.now().UTC()})
+		if err != nil {
+			return Urn{}, err
+		}
+		return s.recordUrnHistory(ctx, next, "Cập nhật thông tin Hũ cốt")
+	}
+	spirit, e := s.GetSpirit(ctx, actor, in.SpiritID)
+	if e != nil {
+		return Urn{}, e
+	}
+	if e = s.requireWrite(ctx, actor, spirit.HouseID); e != nil {
+		return Urn{}, e
+	}
+	created, err := s.store.CreateUrn(ctx, Urn{ID: newID("urn"), SpiritID: spirit.ID, HouseID: spirit.HouseID, Code: strings.TrimSpace(in.Code), UrnType: strings.TrimSpace(in.UrnType), Material: strings.TrimSpace(in.Material), Color: strings.TrimSpace(in.Color), Dimensions: strings.TrimSpace(in.Dimensions), StorageLocation: strings.TrimSpace(in.StorageLocation), InstalledAt: in.InstalledAt, MovedAt: in.MovedAt, ImageURL: strings.TrimSpace(in.ImageURL), Status: in.Status, Notes: strings.TrimSpace(in.Notes), CreatedAt: s.now().UTC(), UpdatedAt: s.now().UTC()})
+	if err != nil {
+		return Urn{}, err
+	}
+	return s.recordUrnHistory(ctx, created, "Tạo Hũ cốt")
+}
+func (s *Service) recordUrnHistory(ctx context.Context, urn Urn, notes string) (Urn, error) {
+	now := s.now().UTC()
+	err := s.store.CreateUrnHistory(ctx, UrnHistory{ID: newID("urn-history"), UrnID: urn.ID, Status: urn.Status, StorageLocation: urn.StorageLocation, ChangedAt: now.Format("2006-01-02"), Notes: notes, CreatedAt: now})
+	if err != nil {
+		return Urn{}, err
+	}
+	return urn, nil
+}
+func (s *Service) DeleteUrn(ctx context.Context, actor Actor, id string) error {
+	v, e := s.store.GetUrn(ctx, actor, id)
+	if e != nil {
+		return e
+	}
+	if e = s.requireWrite(ctx, actor, v.HouseID); e != nil {
+		return e
+	}
+	return s.store.DeleteUrn(ctx, id)
+}
 func (s *Service) CreateHouse(ctx context.Context, actor Actor, in HouseInput) (House, error) {
 	if actor.Role != "admin" {
 		return House{}, ErrForbidden
@@ -367,6 +443,12 @@ func (s *Service) ListSpirits(ctx context.Context, actor Actor, o SearchOptions)
 func (s *Service) GetSpirit(ctx context.Context, actor Actor, id string) (Spirit, error) {
 	return s.store.GetSpirit(ctx, actor, id)
 }
+func (s *Service) ListSpiritPositionHistory(ctx context.Context, actor Actor, id string) ([]SpiritPositionHistory, error) {
+	if _, err := s.store.GetSpirit(ctx, actor, id); err != nil {
+		return nil, err
+	}
+	return s.store.ListSpiritPositionHistory(ctx, id)
+}
 func (s *Service) CreateSpirit(ctx context.Context, actor Actor, in SpiritInput) (Spirit, error) {
 	items, err := s.prepareNewSpirits(ctx, actor, []SpiritInput{in})
 	if err != nil {
@@ -456,11 +538,14 @@ func (s *Service) UpdateSpirit(ctx context.Context, actor Actor, id string, in S
 	return s.store.UpdateSpirit(ctx, item)
 }
 func (s *Service) PatchSpirit(ctx context.Context, actor Actor, id, field, value string) (Spirit, error) {
-	allowed := map[string]bool{"full_name": true, "dharma_name": true, "birth_year": true, "death_year": true, "age": true, "burial_place": true, "sender": true, "sent_month": true, "notes": true}
+	allowed := map[string]bool{"full_name": true, "dharma_name": true, "birth_year": true, "death_year": true, "age": true, "burial_place": true, "sender": true, "sent_month": true, "notes": true, "has_urn": true}
 	if !allowed[field] {
 		return Spirit{}, fmt.Errorf("%w: field cannot be patched", ErrInvalidInput)
 	}
 	value = strings.TrimSpace(value)
+	if field == "has_urn" && value != "true" && value != "false" {
+		return Spirit{}, fmt.Errorf("%w: has_urn must be true or false", ErrInvalidInput)
+	}
 	if field == "full_name" && value == "" {
 		return Spirit{}, fmt.Errorf("%w: full_name is required", ErrInvalidInput)
 	}
@@ -491,11 +576,14 @@ func (s *Service) BulkPatchSpirits(ctx context.Context, actor Actor, ids []strin
 	if err != nil {
 		return err
 	}
-	allowed := map[string]bool{"full_name": true, "dharma_name": true, "birth_year": true, "death_year": true, "age": true, "burial_place": true, "sender": true, "sent_month": true, "notes": true}
+	allowed := map[string]bool{"full_name": true, "dharma_name": true, "birth_year": true, "death_year": true, "age": true, "burial_place": true, "sender": true, "sent_month": true, "notes": true, "has_urn": true}
 	if !allowed[field] {
 		return fmt.Errorf("%w: field cannot be patched", ErrInvalidInput)
 	}
 	value = strings.TrimSpace(value)
+	if field == "has_urn" && value != "true" && value != "false" {
+		return fmt.Errorf("%w: has_urn must be true or false", ErrInvalidInput)
+	}
 	if field == "full_name" && value == "" {
 		return fmt.Errorf("%w: full_name is required", ErrInvalidInput)
 	}
@@ -548,7 +636,21 @@ func (s *Service) normalizeSpirit(in SpiritInput) (Spirit, error) {
 	if in.FullName == "" || strings.TrimSpace(in.HouseID) == "" {
 		return Spirit{}, fmt.Errorf("%w: house_id and full_name are required", ErrInvalidInput)
 	}
-	return Spirit{HouseID: strings.TrimSpace(in.HouseID), TabletID: strings.TrimSpace(in.TabletID), FullName: in.FullName, DharmaName: strings.TrimSpace(in.DharmaName), BirthYear: strings.TrimSpace(in.BirthYear), DeathYear: strings.TrimSpace(in.DeathYear), Age: strings.TrimSpace(in.Age), ImageURL: strings.TrimSpace(in.ImageURL), BurialPlace: strings.TrimSpace(in.BurialPlace), Sender: strings.TrimSpace(in.Sender), SentMonth: strings.TrimSpace(in.SentMonth), Notes: strings.TrimSpace(in.Notes)}, nil
+	status := strings.TrimSpace(in.Status)
+	if status == "" {
+		status = "draft"
+		if strings.TrimSpace(in.TabletID) != "" {
+			status = "worshipping"
+		}
+	}
+	valid := map[string]bool{"draft": true, "worshipping": true, "enshrined": true, "moved": true, "dedicated": true, "archived": true}
+	if !valid[status] {
+		return Spirit{}, fmt.Errorf("%w: invalid spirit status", ErrInvalidInput)
+	}
+	if status == "enshrined" && strings.TrimSpace(in.EnshrinedAt) == "" {
+		return Spirit{}, fmt.Errorf("%w: enshrined spirit requires enshrined_at", ErrInvalidInput)
+	}
+	return Spirit{HouseID: strings.TrimSpace(in.HouseID), TabletID: strings.TrimSpace(in.TabletID), FullName: in.FullName, DharmaName: strings.TrimSpace(in.DharmaName), FamiliarName: strings.TrimSpace(in.FamiliarName), Gender: strings.TrimSpace(in.Gender), BirthDate: strings.TrimSpace(in.BirthDate), DeathDate: strings.TrimSpace(in.DeathDate), BirthLunar: strings.TrimSpace(in.BirthLunar), DeathLunar: strings.TrimSpace(in.DeathLunar), BirthYear: strings.TrimSpace(in.BirthYear), DeathYear: strings.TrimSpace(in.DeathYear), Status: status, EnteredWorshipAreaAt: strings.TrimSpace(in.EnteredWorshipAreaAt), EnshrinedAt: strings.TrimSpace(in.EnshrinedAt), Age: strings.TrimSpace(in.Age), ImageURL: strings.TrimSpace(in.ImageURL), BurialPlace: strings.TrimSpace(in.BurialPlace), Sender: strings.TrimSpace(in.Sender), SentMonth: strings.TrimSpace(in.SentMonth), Notes: strings.TrimSpace(in.Notes), HasUrn: in.HasUrn}, nil
 }
 func (s *Service) requireWrite(ctx context.Context, a Actor, h string) error {
 	r, e := s.store.AccessRole(ctx, a, h)

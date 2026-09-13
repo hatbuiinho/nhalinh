@@ -55,7 +55,7 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 		Name:       "Bài vị đã sửa",
 		Notes:      "Ghi chú mới",
 		Spirits: []SpiritInput{
-			{ID: created[0].ID, FullName: "Nguyễn Văn An đã sửa"},
+			{ID: created[0].ID, FullName: "Nguyễn Văn An đã sửa", HasUrn: true},
 			{FullName: "Lê Văn Cường"},
 		},
 	})
@@ -69,6 +69,9 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	names := map[string]bool{updated[0].FullName: true, updated[1].FullName: true}
 	if !names["Nguyễn Văn An đã sửa"] || !names["Lê Văn Cường"] || names["Trần Thị Bình"] {
 		t.Fatalf("unexpected synchronized spirit list: %#v", names)
+	}
+	if !updated[0].HasUrn && !updated[1].HasUrn {
+		t.Fatalf("expected the updated tablet spirit to retain has_urn: %#v", updated)
 	}
 	items, total, err := service.ListSpirits(ctx, viewer, SearchOptions{HouseID: house.ID, Query: "2a3", Limit: 20})
 	if err != nil || total != 2 || len(items) != 2 {
@@ -110,6 +113,31 @@ func TestHouseAccessAndMultipleSpiritsPerTablet(t *testing.T) {
 	}
 	if occupancy.Summary.PositionCount != 2 || occupancy.Summary.EmptyPositionCount != 1 || occupancy.Summary.TabletCount != 1 || occupancy.Summary.SpiritCount != 4 || occupancy.Summary.UnplacedSpiritCount != 2 {
 		t.Fatalf("unexpected occupancy summary: %#v", occupancy.Summary)
+	}
+}
+
+func TestListSpiritsFiltersByUrnStatus(t *testing.T) {
+	ctx := context.Background()
+	service := NewService(NewMemoryStore(), time.Now)
+	admin := Actor{ID: "admin", Role: "admin"}
+	house, err := service.CreateHouse(ctx, admin, HouseInput{Name: "Nhà Linh Hũ Cốt"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	withUrn, err := service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "Có Hũ Cốt", HasUrn: true})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if _, err = service.CreateSpirit(ctx, admin, SpiritInput{HouseID: house.ID, FullName: "Không Có Hũ Cốt"}); err != nil {
+		t.Fatal(err)
+	}
+	items, total, err := service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, UrnStatus: "yes", Limit: 20})
+	if err != nil || total != 1 || len(items) != 1 || items[0].ID != withUrn.ID || !items[0].HasUrn {
+		t.Fatalf("unexpected urn list: total=%d items=%#v err=%v", total, items, err)
+	}
+	items, total, err = service.ListSpirits(ctx, admin, SearchOptions{HouseID: house.ID, UrnStatus: "no", Limit: 20})
+	if err != nil || total != 1 || len(items) != 1 || items[0].HasUrn {
+		t.Fatalf("unexpected non-urn list: total=%d items=%#v err=%v", total, items, err)
 	}
 }
 
@@ -335,8 +363,22 @@ func TestDeletePositionKeepsTabletsUnplacedAndTheyCanBeMoved(t *testing.T) {
 	if err != nil || len(unplaced) != 1 || unplaced[0].ID != tablet.ID || unplaced[0].SpiritCount != 1 {
 		t.Fatalf("unexpected unplaced tablets: %#v, err=%v", unplaced, err)
 	}
+	occupancy, err := service.Occupancy(ctx, admin, house.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if occupancy.Summary.SpiritCount != 1 || occupancy.Summary.UnplacedSpiritCount != 1 {
+		t.Fatalf("spirits on an unplaced tablet must be included in occupancy: %#v", occupancy.Summary)
+	}
 	if err = service.MoveTablet(ctx, admin, tablet.ID, to.ID); err != nil {
 		t.Fatal(err)
+	}
+	occupancy, err = service.Occupancy(ctx, admin, house.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if occupancy.Summary.SpiritCount != 1 || occupancy.Summary.UnplacedSpiritCount != 0 {
+		t.Fatalf("moving the tablet must update occupancy: %#v", occupancy.Summary)
 	}
 	placed, err := service.ListTablets(ctx, admin, to.ID)
 	if err != nil || len(placed) != 1 || placed[0].ID != tablet.ID {

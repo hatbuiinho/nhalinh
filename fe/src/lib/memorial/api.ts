@@ -89,14 +89,24 @@ export type Spirit = {
 	tablet_image_url: string;
 	full_name: string;
 	dharma_name: string;
+	familiar_name: string;
+	gender: string;
+	birth_date: string;
+	death_date: string;
+	birth_lunar: string;
+	death_lunar: string;
 	birth_year: string;
 	death_year: string;
+	status: string;
+	entered_worship_area_at: string;
+	enshrined_at: string;
 	age: string;
 	image_url: string;
 	burial_place: string;
 	sender: string;
 	sent_month: string;
 	notes: string;
+	has_urn: boolean;
 	created_at: string;
 	updated_at: string;
 };
@@ -114,8 +124,10 @@ export type SpiritInput = Pick<
 	| 'sender'
 	| 'sent_month'
 	| 'notes'
->;
-export type InlineSpiritInput = Omit<SpiritInput, 'house_id' | 'tablet_id'>;
+	| 'has_urn'
+> & Partial<Pick<Spirit, 'familiar_name' | 'gender' | 'birth_date' | 'death_date' | 'birth_lunar' | 'death_lunar' | 'status' | 'entered_worship_area_at' | 'enshrined_at'>>;
+export type SpiritPositionHistory = { id:string; spirit_id:string; from_tablet_id:string; to_tablet_id:string; from_position_id:string; to_position_id:string; change_type:string; changed_at:string; notes:string; performed_by:string };
+export type InlineSpiritInput = Omit<SpiritInput, 'house_id' | 'tablet_id' | 'has_urn'>;
 export type EditableSpiritInput = InlineSpiritInput & { id?: string };
 export type SpiritImportIssue = {
 	row_number: number;
@@ -236,7 +248,7 @@ export const updateTablet = (
 		image_url: string;
 		sender: string;
 		notes: string;
-		spirits: EditableSpiritInput[];
+		spirits: Array<EditableSpiritInput & Partial<Pick<SpiritInput, 'has_urn'>>>;
 	}
 ) =>
 	apiRequest<Tablet>(`/api/memorial-tablets/${encodeURIComponent(id)}`, {
@@ -276,6 +288,10 @@ export async function listSpirits(
 	});
 	return apiRequest<{ spirits: Spirit[]; total: number; has_more: boolean; next_offset: number }>(`/api/spirits?${p}`);
 }
+export const listUrnSpirits = async () =>
+	(
+		await apiRequest<{ spirits: Spirit[] }>('/api/spirits?urn_status=yes&limit=500&offset=0')
+	).spirits;
 export async function searchUnplacedSpirits(houseId: string, query: string, limit = 20) {
 	const params = new URLSearchParams({
 		house_id: houseId,
@@ -309,6 +325,17 @@ export const patchSpirit = (id: string, field: string, value: string) =>
 		method: 'PATCH',
 		body: JSON.stringify({ field, value })
 	});
+export const listSpiritPositionHistory = async (id: string) => (await apiRequest<{history: SpiritPositionHistory[]}>(`/api/spirits/${encodeURIComponent(id)}/position-history`)).history;
+export const setSpiritUrnStatus = (id: string, hasUrn: boolean) =>
+	patchSpirit(id, 'has_urn', String(hasUrn));
+export type Urn = { id:string; spirit_id:string; house_id:string; full_name:string; dharma_name:string; birth_year:string; death_year:string; code:string; urn_type:string; material:string; color:string; dimensions:string; storage_location:string; installed_at:string; moved_at:string; image_url:string; status:'installed'|'moved'|'returned'; notes:string };
+export type UrnInput = Omit<Urn,'id'|'house_id'|'full_name'|'dharma_name'|'birth_year'|'death_year'>;
+export type UrnHistory = { id:string; urn_id:string; status:'installed'|'moved'|'returned'; storage_location:string; changed_at:string; notes:string; created_at:string };
+export const listUrns = async () => (await apiRequest<{urns:Urn[]}>('/api/urns')).urns;
+export const listUrnHistory = async (id:string) => (await apiRequest<{history:UrnHistory[]}>(`/api/urns/${encodeURIComponent(id)}/history`)).history;
+export const createUrn = (input:UrnInput) => apiRequest<Urn>('/api/urns',{method:'POST',body:JSON.stringify(input)});
+export const updateUrn = (id:string,input:UrnInput) => apiRequest<Urn>(`/api/urns/${encodeURIComponent(id)}`,{method:'PUT',body:JSON.stringify(input)});
+export const deleteUrn = (id:string) => apiRequest<void>(`/api/urns/${encodeURIComponent(id)}`,{method:'DELETE'});
 export const deleteSpirit = (id: string) =>
 	apiRequest<void>(`/api/spirits/${encodeURIComponent(id)}`, { method: 'DELETE' });
 export const bulkPatchSpirits = (ids: string[], field: string, value: string) =>

@@ -48,20 +48,29 @@ type tabletMovePayload struct {
 	PositionID string `json:"position_id"`
 }
 type spiritPayload struct {
-	ID          string `json:"id"`
-	HouseID     string `json:"house_id"`
-	TabletID    string `json:"tablet_id"`
-	FullName    string `json:"full_name"`
-	DharmaName  string `json:"dharma_name"`
-	BirthYear   string `json:"birth_year"`
-	DeathYear   string `json:"death_year"`
-	Age         string `json:"age"`
-	ImageURL    string `json:"image_url"`
-	BurialPlace string `json:"burial_place"`
-	Sender      string `json:"sender"`
-	SentMonth   string `json:"sent_month"`
-	Notes       string `json:"notes"`
-	HasUrn      bool   `json:"has_urn"`
+	ID                   string `json:"id"`
+	HouseID              string `json:"house_id"`
+	TabletID             string `json:"tablet_id"`
+	FullName             string `json:"full_name"`
+	DharmaName           string `json:"dharma_name"`
+	FamiliarName         string `json:"familiar_name"`
+	Gender               string `json:"gender"`
+	BirthDate            string `json:"birth_date"`
+	DeathDate            string `json:"death_date"`
+	BirthLunar           string `json:"birth_lunar"`
+	DeathLunar           string `json:"death_lunar"`
+	BirthYear            string `json:"birth_year"`
+	DeathYear            string `json:"death_year"`
+	Status               string `json:"status"`
+	EnteredWorshipAreaAt string `json:"entered_worship_area_at"`
+	EnshrinedAt          string `json:"enshrined_at"`
+	Age                  string `json:"age"`
+	ImageURL             string `json:"image_url"`
+	BurialPlace          string `json:"burial_place"`
+	Sender               string `json:"sender"`
+	SentMonth            string `json:"sent_month"`
+	Notes                string `json:"notes"`
+	HasUrn               bool   `json:"has_urn"`
 }
 type spiritsBatchPayload struct {
 	Spirits []spiritPayload `json:"spirits"`
@@ -69,6 +78,20 @@ type spiritsBatchPayload struct {
 type spiritPatchPayload struct {
 	Field string `json:"field"`
 	Value string `json:"value"`
+}
+type urnPayload struct {
+	SpiritID        string `json:"spirit_id"`
+	Code            string `json:"code"`
+	UrnType         string `json:"urn_type"`
+	Material        string `json:"material"`
+	Color           string `json:"color"`
+	Dimensions      string `json:"dimensions"`
+	StorageLocation string `json:"storage_location"`
+	InstalledAt     string `json:"installed_at"`
+	MovedAt         string `json:"moved_at"`
+	ImageURL        string `json:"image_url"`
+	Status          string `json:"status"`
+	Notes           string `json:"notes"`
 }
 type spiritsBulkPatchPayload struct {
 	IDs   []string `json:"ids"`
@@ -395,9 +418,20 @@ func (h *MemorialHandler) SpiritsBatch(w http.ResponseWriter, r *http.Request) {
 	}
 }
 func (h *MemorialHandler) Spirit(w http.ResponseWriter, r *http.Request) {
-	id := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/spirits/"), "/")
-	if id == "" || strings.Contains(id, "/") {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/spirits/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 1 || len(parts) > 2 || parts[0] == "" || (len(parts) == 2 && parts[1] != "position-history") {
 		writeError(w, 404, "not_found", "Không tìm thấy Hương linh")
+		return
+	}
+	id := parts[0]
+	if len(parts) == 2 {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		v, e := h.service.ListSpiritPositionHistory(r.Context(), actor(r), id)
+		h.write(w, map[string]any{"history": v}, e, http.StatusOK)
 		return
 	}
 	switch r.Method {
@@ -425,8 +459,59 @@ func (h *MemorialHandler) Spirit(w http.ResponseWriter, r *http.Request) {
 		methodNotAllowed(w)
 	}
 }
+func urnInput(p urnPayload) memorial.UrnInput {
+	return memorial.UrnInput{SpiritID: p.SpiritID, Code: p.Code, UrnType: p.UrnType, Material: p.Material, Color: p.Color, Dimensions: p.Dimensions, StorageLocation: p.StorageLocation, InstalledAt: p.InstalledAt, MovedAt: p.MovedAt, ImageURL: p.ImageURL, Status: p.Status, Notes: p.Notes}
+}
+func (h *MemorialHandler) Urns(w http.ResponseWriter, r *http.Request) {
+	switch r.Method {
+	case http.MethodGet:
+		v, e := h.service.ListUrns(r.Context(), actor(r))
+		h.write(w, map[string]any{"urns": v}, e, 200)
+	case http.MethodPost:
+		var p urnPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		v, e := h.service.SaveUrn(r.Context(), actor(r), "", urnInput(p))
+		h.write(w, v, e, 201)
+	default:
+		methodNotAllowed(w)
+	}
+}
+func (h *MemorialHandler) Urn(w http.ResponseWriter, r *http.Request) {
+	path := strings.Trim(strings.TrimPrefix(r.URL.Path, "/api/urns/"), "/")
+	parts := strings.Split(path, "/")
+	if len(parts) < 1 || len(parts) > 2 || parts[0] == "" || (len(parts) == 2 && parts[1] != "history") {
+		writeError(w, 404, "not_found", "Không tìm thấy Hũ Cốt")
+		return
+	}
+	id := parts[0]
+	if len(parts) == 2 {
+		if r.Method != http.MethodGet {
+			methodNotAllowed(w)
+			return
+		}
+		v, e := h.service.ListUrnHistory(r.Context(), actor(r), id)
+		h.write(w, map[string]any{"history": v}, e, http.StatusOK)
+		return
+	}
+	switch r.Method {
+	case http.MethodPut:
+		var p urnPayload
+		if !decode(w, r, &p) {
+			return
+		}
+		v, e := h.service.SaveUrn(r.Context(), actor(r), id, urnInput(p))
+		h.write(w, v, e, 200)
+	case http.MethodDelete:
+		e := h.service.DeleteUrn(r.Context(), actor(r), id)
+		h.write(w, nil, e, 204)
+	default:
+		methodNotAllowed(w)
+	}
+}
 func spiritInput(p spiritPayload) memorial.SpiritInput {
-	return memorial.SpiritInput{ID: p.ID, HouseID: p.HouseID, TabletID: p.TabletID, FullName: p.FullName, DharmaName: p.DharmaName, BirthYear: p.BirthYear, DeathYear: p.DeathYear, Age: p.Age, ImageURL: p.ImageURL, BurialPlace: p.BurialPlace, Sender: p.Sender, SentMonth: p.SentMonth, Notes: p.Notes, HasUrn: p.HasUrn}
+	return memorial.SpiritInput{ID: p.ID, HouseID: p.HouseID, TabletID: p.TabletID, FullName: p.FullName, DharmaName: p.DharmaName, FamiliarName: p.FamiliarName, Gender: p.Gender, BirthDate: p.BirthDate, DeathDate: p.DeathDate, BirthLunar: p.BirthLunar, DeathLunar: p.DeathLunar, BirthYear: p.BirthYear, DeathYear: p.DeathYear, Status: p.Status, EnteredWorshipAreaAt: p.EnteredWorshipAreaAt, EnshrinedAt: p.EnshrinedAt, Age: p.Age, ImageURL: p.ImageURL, BurialPlace: p.BurialPlace, Sender: p.Sender, SentMonth: p.SentMonth, Notes: p.Notes, HasUrn: p.HasUrn}
 }
 func readSpiritImportUpload(w http.ResponseWriter, r *http.Request) (string, []byte, bool) {
 	if err := r.ParseMultipartForm(maxSpiritImportFileSize); err != nil {

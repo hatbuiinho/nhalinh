@@ -1,5 +1,5 @@
 import type { Permission } from '$lib/auth/auth-store.svelte';
-export type MainRouteName = 'memorial' | 'structure' | 'statistics' | 'users';
+export type MainRouteName = 'memorial' | 'urns' | 'structure' | 'statistics' | 'users';
 export type RouteName = MainRouteName | 'profile';
 export type AppRoute = { name: RouteName; path: string; title: string };
 export const bottomNavItems = [
@@ -9,6 +9,7 @@ export const bottomNavItems = [
 		label: 'Hương linh',
 		icon: 'icon-[lucide--search]'
 	},
+	{ name: 'urns' as const, path: '/urns', label: 'Hũ Cốt', icon: 'icon-[lucide--archive]'},
 	{
 		name: 'structure' as const,
 		path: '/structure',
@@ -27,6 +28,7 @@ export function parseRoute(pathname: string): AppRoute {
 	const path = pathname.length > 1 && pathname.endsWith('/') ? pathname.slice(0, -1) : pathname;
 	if (path === '/' || path === '/memorial')
 		return { name: 'memorial', path: '/memorial', title: 'Tra cứu Hương linh' };
+	if (path === '/urns') return { name: 'urns', path, title: 'Quản lý Hũ Cốt' };
 	if (path === '/structure') return { name: 'structure', path, title: 'Nhà Linh & bài vị' };
 	if (path === '/statistics') return { name: 'statistics', path, title: 'Thống kê phân bổ' };
 	if (path === '/users') return { name: 'users', path, title: 'Tài khoản' };

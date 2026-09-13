@@ -4,7 +4,8 @@
 	import { changePasswordPopupStore } from '$lib/auth/change-password-popup-store.svelte';
 	import { bottomNavItems, mainRouteFor, type AppRoute } from '$lib/navigation/routes';
 	import { router } from '$lib/navigation/router.svelte';
-	import Logo from '$lib/ui/Logo.svelte';
+	import { listHouses, type House } from '$lib/memorial/api';
+	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 
 	let {
 		route,
@@ -15,7 +16,9 @@
 	} = $props();
 	let active = $derived(mainRouteFor(route));
 	let profileMenuOpen = $state(false);
+	let houses = $state<House[]>([]);
 	let profileMenuRoot = $state<HTMLDivElement>();
+	const selectedHouseStorageKey = 'nhalinh:selected-house-id';
 	let navItems = $derived(
 		bottomNavItems.filter((item) => item.name !== 'users' || authStore.can('user.read'))
 	);
@@ -26,6 +29,17 @@
 	});
 
 	onMount(() => {
+		void listHouses()
+			.then((items) => {
+				houses = items;
+				const savedID = localStorage.getItem(selectedHouseStorageKey) ?? '';
+				const preferredID = houseFilter.id || savedID;
+				houseFilter.id = items.some((house) => house.id === preferredID)
+					? preferredID
+					: (items[0]?.id ?? '');
+				if (houseFilter.id) selectHouse();
+			})
+			.catch(() => {});
 		function closeOutside(event: PointerEvent) {
 			if (event.target instanceof Node && !profileMenuRoot?.contains(event.target)) {
 				profileMenuOpen = false;
@@ -41,6 +55,15 @@
 			document.removeEventListener('keydown', closeOnEscape);
 		};
 	});
+	function selectHouse() {
+		if (houseFilter.id) localStorage.setItem(selectedHouseStorageKey, houseFilter.id);
+		window.dispatchEvent(new CustomEvent('memorial-house-select', { detail: houseFilter.id }));
+	}
+	function houseLabel(name: string) {
+		if (name === 'Bửu Lâm') return 'Nhà Linh Bửu Lâm';
+		if (name === 'Tổ' || name === 'Tổ Đinh' || name === 'Tổ Đình' || name === 'Tổ đình') return 'Nhà Linh Phật Quang';
+		return name;
+	}
 
 	function viewProfile() {
 		profileMenuOpen = false;
@@ -71,9 +94,9 @@
 		]}
 	>
 		{#if !collapsed}
-			<Logo />
-		{:else}
-			<Logo compact />
+			<div class="relative w-full"><select bind:value={houseFilter.id} onchange={selectHouse} aria-label="Chọn Nhà Linh" class="h-12 w-full appearance-none rounded-md border border-[var(--color-border-strong)] bg-[url('/icons/icon.svg')] bg-no-repeat bg-[var(--color-surface)] py-1 pr-10 pl-12 text-sm font-semibold [background-position:10px_center] [background-size:28px]">{#each houses as house (house.id)}<option value={house.id}>{houseLabel(house.name)}</option>{/each}</select><span class="pointer-events-none absolute top-1/2 right-3 icon-[lucide--chevron-down] h-4 w-4 -translate-y-1/2 text-[var(--color-text-secondary)]" aria-hidden="true"></span></div>
+		{:else if collapsed}
+			<span class="h-8 w-8 bg-[url('/icons/icon.svg')] bg-contain bg-center bg-no-repeat" aria-label="Nhà Linh"></span>
 		{/if}
 	</div>
 

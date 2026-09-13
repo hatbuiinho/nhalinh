@@ -1,0 +1,31 @@
+9:16:41 AM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+9:21:40 AM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+9:32:42 AM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+9:56:21 AM [vite] (client) [Unhandled rejection] TypeError: Failed to fetch
+ > window.fetch node_modules/@sveltejs/kit/src/runtime/client/fetcher.js?v=352eea74:67:10
+ > apiFetch src/lib/api/client.ts:18:8
+    16 |  		headers.set('Content-Type', 'application/json');
+    17 |  	}
+    18 |  	return fetch(`${apiBaseURL()}${path}`, {
+       |          ^
+    19 |  		...init,
+    20 |  		headers
+ > apiRequest src/lib/api/client.ts:25:24
+ > listTablets src/lib/memorial/api.ts:226:8
+ > src/lib/screens/MemorialScreen.svelte:541:59
+ > changeArea src/lib/screens/MemorialScreen.svelte:541:41
+
+9:56:22 AM [vite] (client) [Unhandled rejection] TypeError: Failed to fetch
+ > window.fetch node_modules/@sveltejs/kit/src/runtime/client/fetcher.js?v=352eea74:67:10
+ > apiFetch src/lib/api/client.ts:18:8
+    16 |  		headers.set('Content-Type', 'application/json');
+    17 |  	}
+    18 |  	return fetch(`${apiBaseURL()}${path}`, {
+       |          ^
+    19 |  		...init,
+    20 |  		headers
+ > apiRequest src/lib/api/client.ts:25:24
+ > listTablets src/lib/memorial/api.ts:226:8
+ > src/lib/screens/MemorialScreen.svelte:541:59
+ > changeArea src/lib/screens/MemorialScreen.svelte:541:41
+

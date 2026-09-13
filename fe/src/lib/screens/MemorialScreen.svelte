@@ -11,6 +11,7 @@
 	import SpiritPortrait from '$lib/memorial/SpiritPortrait.svelte';
 	import TabletPortrait from '$lib/memorial/TabletPortrait.svelte';
 	import { memorialRevisionStore } from '$lib/memorial/memorial-revision-store.svelte';
+	import { houseFilter } from '$lib/memorial/house-filter.svelte';
 	import { uploadSpiritImage } from '$lib/uploads/api';
 	import {
 		createPositions,
@@ -27,6 +28,7 @@
 		listHouses,
 		listPositions,
 		listSpirits,
+		listSpiritPositionHistory,
 		listTabletSpirits,
 		listTablets,
 		patchSpirit,
@@ -44,6 +46,7 @@
 		type SpiritImportPreview,
 		type SpiritImportResult,
 		type SpiritInput,
+		type SpiritPositionHistory,
 		type Tablet
 	} from '$lib/memorial/api';
 	import { emptyInlineSpirit, toInlineSpirit } from '$lib/memorial/sheet-parser';
@@ -68,6 +71,7 @@
 		| 'sender'
 		| 'sent_month'
 		| 'notes'
+		| 'has_urn'
 		| 'created_at'
 		| 'updated_at'
 	>;
@@ -92,29 +96,24 @@
 		| 'notes'
 	>;
 	const spiritColumns: SpiritColumn[] = [
-		{ key: 'image_url', label: 'Ảnh', defaultWidth: 72 },
-		{ key: 'full_name', label: 'Họ tên', defaultWidth: 160 },
-		{ key: 'dharma_name', label: 'Pháp danh', defaultWidth: 128 },
-		{ key: 'birth_year', label: 'Năm sinh', defaultWidth: 88 },
-		{ key: 'death_year', label: 'Năm mất', defaultWidth: 88 },
-		{ key: 'age', label: 'Tuổi', defaultWidth: 64 },
+		{ key: 'image_url', label: 'Ảnh', defaultWidth: 48 },
+		{ key: 'full_name', label: 'Họ tên', defaultWidth: 120 },
+		{ key: 'dharma_name', label: 'Pháp danh', defaultWidth: 96 },
+		{ key: 'birth_year', label: 'Năm sinh', defaultWidth: 64 },
+		{ key: 'death_year', label: 'Năm mất', defaultWidth: 64 },
+		{ key: 'age', label: 'Tuổi', defaultWidth: 48 },
 		{ key: 'burial_place', label: 'Nơi an táng', defaultWidth: 144 },
 		{ key: 'sender', label: 'Người gửi', defaultWidth: 128 },
-		{ key: 'sent_month', label: 'Tháng gửi', defaultWidth: 96 },
+		{ key: 'sent_month', label: 'Ngày gửi', defaultWidth: 96 },
 		{ key: 'notes', label: 'Ghi chú', defaultWidth: 160 },
-		{ key: 'created_at', label: 'Ngày tạo', defaultWidth: 112 },
-		{ key: 'updated_at', label: 'Cập nhật', defaultWidth: 112 }
+		{ key: 'has_urn', label: 'Hũ Cốt', defaultWidth: 80 }
 	];
 	const placementColumns: SpiritColumn[] = [
-		{ key: 'house_name', label: 'Nhà Linh', defaultWidth: 144 },
 		{ key: 'position_name', label: 'Vị trí', defaultWidth: 64 },
 		{ key: 'tablet_image_url', label: 'Bài Vị', defaultWidth: 96 }
 	];
-	const columnWidthsStorageKey = 'nhalinh:spirit-table-column-widths:v2';
-	const spiritSortKeys = new Set<SpiritSortKey>([
-		...spiritColumns.map((column) => column.key),
-		...placementColumns.map((column) => column.key)
-	]);
+	const columnWidthsStorageKey = 'nhalinh:spirit-table-column-widths:v3';
+	const spiritSortKeys = new Set<SpiritSortKey>(['full_name', 'dharma_name', 'birth_year', 'death_year', 'age', 'sender', 'sent_month', 'has_urn']);
 	const vietnameseCollator = new Intl.Collator('vi', { numeric: true, sensitivity: 'base' });
 	const editablePatchKeys = new Set<SpiritSortKey>([
 		'full_name',
@@ -139,6 +138,7 @@
 		total = $state(0),
 		spiritGroupOffset = $state(0),
 		loading = $state(true),
+		spiritRequestVersion = $state(0),
 		loadingMore = $state(false),
 		hasMore = $state(false),
 		saving = $state(false),
@@ -162,6 +162,7 @@
 		exportScope = $state<ExportScope>('current'),
 		exportBusy = $state(false),
 		inlineEditorBusy = $state(false),
+		hasPendingRelatedChanges = $state(false),
 		patchSaving = $state(false),
 		bulkActionOpen = $state(false),
 		bulkPatchOpen = $state(false),
@@ -207,11 +208,14 @@
 	);
 	let selectedSpiritIDs = $state<Set<string>>(new Set());
 	let deleteConfirmation = $state('');
+	let spiritHistory = $state<SpiritPositionHistory[]>([]);
+	let spiritHistoryOpen = $state(false);
+	let spiritHistoryName = $state('');
 	let newTabletForm = $state({ name: '', image_url: '', sender: '', notes: '' });
 	let selectedHouse = $derived(houses.find((v) => v.id === houseId));
 	let selectedFormTablet = $derived(formTablets.find((tablet) => tablet.id === form.tablet_id));
 	let creatingTablet = $derived(singleSpiritEntry && !form.tablet_id);
-	let hasNewTabletSpirit = $derived(Boolean(form.full_name.trim()));
+	let hasNewTabletSpirit = $derived(newSpirits.length > 0);
 	let showSpiritEditor = $derived(!relatedTabletId || spiritEditorVisible);
 	let vacantPickerPositions = $derived(
 		(vacantPositionPicker?.positions ?? []).filter(
@@ -241,10 +245,8 @@
 	let canWrite = $derived(
 		authStore.user?.role === 'admin' || selectedHouse?.access_role === 'editor'
 	);
-	let showsHouseColumn = $derived(houses.length > 1);
 	let tableSpiritColumns = $derived([
-		...placementColumns.slice(1),
-		...(showsHouseColumn ? [placementColumns[0]] : []),
+		...placementColumns,
 		...spiritColumns
 	]);
 	let sortedSpirits = $derived.by(() => {
@@ -300,10 +302,18 @@
 
 	onMount(() => {
 		restoreTablePreferences();
+		const onHouseSelect = (event: Event) => {
+			const nextHouseID = (event as CustomEvent<string>).detail;
+			if (nextHouseID === houseId) return;
+			houseId = nextHouseID;
+			void changeHouse();
+		};
+		window.addEventListener('memorial-house-select', onHouseSelect);
 		document.addEventListener('pointerdown', dismissCellEditOnOutsideClick);
 		document.addEventListener('pointerdown', dismissBulkActionsOnOutsideClick);
 		void initialize();
 		return () => {
+			window.removeEventListener('memorial-house-select', onHouseSelect);
 			document.removeEventListener('pointerdown', dismissCellEditOnOutsideClick);
 			document.removeEventListener('pointerdown', dismissBulkActionsOnOutsideClick);
 			if (timer) clearTimeout(timer);
@@ -480,7 +490,7 @@
 			id: item.id,
 			key: column.key as EditablePatchKey,
 			label: column.label,
-			value: item[column.key]
+			value: String(item[column.key] ?? '')
 		};
 		void focusCellEditField();
 	}
@@ -511,7 +521,8 @@
 		loading = true;
 		try {
 			houses = await listHouses();
-			houseId = houses[0]?.id ?? '';
+			houseId = houseFilter.id || houses[0]?.id || '';
+			if (!houseFilter.id) houseFilter.id = houseId;
 			await changeHouse();
 		} catch (e) {
 			toastStore.error(message(e));
@@ -532,7 +543,18 @@
 		await load();
 	}
 	async function load() {
-		const page = await listSpirits(query, houseId, areaId);
+		const requestVersion = ++spiritRequestVersion;
+		const selectedHouseID = houseId;
+		const selectedAreaID = areaId;
+		const selectedQuery = query;
+		const page = await listSpirits(selectedQuery, selectedHouseID, selectedAreaID);
+		if (
+			requestVersion !== spiritRequestVersion ||
+			selectedHouseID !== houseId ||
+			selectedAreaID !== areaId ||
+			selectedQuery !== query
+		)
+			return;
 		spirits = page.spirits;
 		total = page.total;
 		spiritGroupOffset = page.next_offset;
@@ -701,8 +723,9 @@
 		relatedSpiritsRequest++;
 		form = emptyForm();
 		newTabletForm = { name: '', image_url: '', sender: '', notes: '' };
-		newSpirits = [emptyInlineSpirit()];
+		newSpirits = [];
 		inlineEditorBusy = false;
+		hasPendingRelatedChanges = false;
 		formHouseId = preferredFormHouse();
 		form.house_id = formHouseId;
 		formAreaId = '';
@@ -735,7 +758,8 @@
 			burial_place: item.burial_place,
 			sender: item.sender,
 			sent_month: item.sent_month,
-			notes: item.notes
+			notes: item.notes,
+			has_urn: item.has_urn
 		};
 		formPositionQuery = item.position_name;
 		selectedFormPosition = item.position_id
@@ -765,6 +789,7 @@
 	}
 	async function edit(item: Spirit) {
 		fillEditingForm(item);
+		hasPendingRelatedChanges = false;
 		singleSpiritEntry = false;
 		spiritEditorVisible = false;
 		addingRelatedSpirit = false;
@@ -850,6 +875,39 @@
 		} finally {
 			saving = false;
 		}
+	}
+	function addSpiritToNewTablet() {
+		if (!selectedFormPosition) {
+			toastStore.error('Vui lòng chọn vị trí trước');
+			return;
+		}
+		if (!form.full_name.trim()) {
+			toastStore.error('Họ tên không được để trống');
+			return;
+		}
+		newSpirits = [...newSpirits, toInlineSpirit(form)];
+		form = { ...emptyForm(), house_id: formHouseId };
+		toastStore.success('Đã thêm Hương linh vào danh sách cùng bài vị');
+	}
+	function removeNewTabletSpirit(index: number) {
+		newSpirits = newSpirits.filter((_, itemIndex) => itemIndex !== index);
+	}
+	function updateEditedSpiritInRelatedList() {
+		if (!editing) return;
+		if (!form.full_name.trim()) {
+			toastStore.error('Họ tên không được để trống');
+			return;
+		}
+		const current = relatedSpirits.find((spirit) => spirit.id === editing?.id);
+		if (!current) return;
+		const updated = { ...current, ...form };
+		relatedSpirits = relatedSpirits.map((spirit) => (spirit.id === updated.id ? updated : spirit));
+		editing = updated;
+		hasPendingRelatedChanges = true;
+		toastStore.success('Đã cập nhập Hương linh vào danh sách');
+	}
+	function markEditingFormChanged() {
+		if (editing && !saving) hasPendingRelatedChanges = true;
 	}
 	function openSpiritEditorFromRow(event: MouseEvent, item: Spirit) {
 		if (!canWrite) return;
@@ -1091,8 +1149,8 @@
 		positionLoading = false;
 		tabletLoading = false;
 	}
-	async function save(e: SubmitEvent) {
-		e.preventDefault();
+	async function save(e?: SubmitEvent) {
+		e?.preventDefault();
 		saving = true;
 		try {
 			if (editing) {
@@ -1119,7 +1177,8 @@
 								burial_place: source.burial_place,
 								sender: source.sender,
 								sent_month: source.sent_month,
-								notes: source.notes
+								notes: source.notes,
+								has_urn: source.has_urn
 							};
 						})
 					});
@@ -1133,9 +1192,6 @@
 					await createSpirits([relatedSpiritForm]);
 				}
 			} else if (singleSpiritEntry) {
-				if (!form.full_name.trim()) {
-					throw new Error('Họ tên không được để trống');
-				}
 				if (
 					!selectedFormPosition &&
 					Object.values(newTabletForm).some((value) => value.trim() !== '')
@@ -1143,16 +1199,21 @@
 					throw new Error('Vui lòng chọn vị trí trước khi tạo Bài vị');
 				}
 				if (selectedFormPosition && !form.tablet_id) {
-					const { house_id: _houseID, tablet_id: _tabletID, ...spirit } = form;
+					if (newSpirits.length === 0) {
+						throw new Error('Hãy thêm ít nhất một Hương linh vào danh sách trước khi lưu');
+					}
 					await createTablet({
 						position_id: selectedFormPosition.id,
-						name: newTabletForm.name.trim() || form.full_name.trim(),
+						name: newTabletForm.name.trim() || newSpirits[0].full_name.trim(),
 						image_url: newTabletForm.image_url,
 						sender: newTabletForm.sender,
 						notes: newTabletForm.notes,
-						spirits: [spirit]
+						spirits: newSpirits
 					});
 				} else {
+					if (!form.full_name.trim()) {
+						throw new Error('Họ tên không được để trống');
+					}
 					await createSpirits([
 						{
 							...form,
@@ -1180,7 +1241,8 @@
 					rows.map((spirit) => ({
 						...spirit,
 						house_id: formHouseId,
-						tablet_id: form.tablet_id
+						tablet_id: form.tablet_id,
+						has_urn: false
 					}))
 				);
 			}
@@ -1194,6 +1256,7 @@
 							? 'Đã cập nhật Hương linh'
 							: `Đã thêm ${newSpirits.filter(hasSpiritData).length} Hương linh`
 			);
+			hasPendingRelatedChanges = false;
 			formOpen = false;
 			await load();
 		} catch (err) {
@@ -1204,6 +1267,25 @@
 			singleSpiritEntry = false;
 			addingRelatedSpirit = false;
 		}
+	}
+	async function requestCloseForm() {
+		if (saving || imageUploading) return;
+		if (!hasPendingRelatedChanges) {
+			formOpen = false;
+			return;
+		}
+		const shouldSave = await popupStore.confirm({
+			title: 'Lưu thông tin đã cập nhập?',
+			message: 'Bạn có muốn Lưu thông tin đã cập nhập không?',
+			confirmLabel: 'Lưu',
+			cancelLabel: 'Hủy'
+		});
+		if (shouldSave) {
+			await save();
+			return;
+		}
+		hasPendingRelatedChanges = false;
+		formOpen = false;
 	}
 	function hasSpiritData(spirit: EditableSpiritInput) {
 		return Object.entries(spirit).some(
@@ -1222,6 +1304,7 @@
 		imageUploading = true;
 		try {
 			form.image_url = await uploadSpiritImage(file);
+			markEditingFormChanged();
 			toastStore.success('Đã tải ảnh Hương linh');
 		} catch (e) {
 			toastStore.error(message(e));
@@ -1245,6 +1328,7 @@
 		imageUploading = true;
 		try {
 			selectedFormTablet.image_url = await uploadSpiritImage(file);
+			markEditingFormChanged();
 			toastStore.success('Đã tải ảnh Bài vị');
 		} catch (e) {
 			toastStore.error(message(e));
@@ -1336,16 +1420,33 @@
 			dharma_name: '',
 			birth_year: '',
 			death_year: '',
+			familiar_name: '',
+			gender: '',
+			birth_date: '',
+			death_date: '',
+			birth_lunar: '',
+			death_lunar: '',
+			status: 'draft',
+			entered_worship_area_at: '',
+			enshrined_at: '',
 			age: '',
 			image_url: '',
 			burial_place: '',
 			sender: '',
 			sent_month: '',
-			notes: ''
+			notes: '',
+			has_urn: false
 		};
 	}
 	function message(e: unknown) {
 		return e instanceof Error ? e.message : 'Có lỗi xảy ra';
+	}
+	async function showSpiritHistory(item: Spirit) {
+		spiritHistoryName = item.full_name;
+		spiritHistory = [];
+		spiritHistoryOpen = true;
+		try { spiritHistory = await listSpiritPositionHistory(item.id); }
+		catch (error) { toastStore.error(message(error)); }
 	}
 	function closeActiveForm(event: KeyboardEvent) {
 		if (event.key !== 'Escape') return;
@@ -1375,7 +1476,7 @@
 		}
 		if (document.querySelector('[role="dialog"][aria-modal="true"]')) return;
 		if (formOpen) {
-			if (!saving && !imageUploading) formOpen = false;
+			void requestCloseForm();
 			return;
 		}
 		if (contentFullscreen) contentFullscreen = false;
@@ -1391,16 +1492,7 @@
 	]}
 >
 	<div class="border-b border-[var(--color-border)] bg-[var(--color-bg)] px-4 py-3 md:px-6 lg:px-8">
-		<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[220px_180px_1fr_auto]">
-			<select
-				bind:value={houseId}
-				onchange={() => void changeHouse()}
-				aria-label="Chọn Nhà Linh"
-				class="h-11 rounded-md border-[var(--color-border-strong)] text-sm"
-				><option value="">Tất cả Nhà Linh</option>{#each houses as h (h.id)}<option value={h.id}
-						>{h.name}</option
-					>{/each}</select
-			>
+	<div class="mx-auto grid max-w-[1320px] gap-2 md:grid-cols-[180px_1fr_auto]">
 			<select
 				bind:value={areaId}
 				onchange={() => void changeArea()}
@@ -1584,6 +1676,10 @@
 </section>
 
 <Lightbox src={lightboxSrc} alt={lightboxAlt} bind:open={lightboxOpen} />
+
+<Popup open={spiritHistoryOpen} title={`Lịch sử vị trí · ${spiritHistoryName}`} sizeClass="max-w-xl" onClose={() => spiritHistoryOpen = false}>
+	{#if spiritHistory.length === 0}<p class="text-sm text-[var(--color-text-secondary)]">Chưa có lịch sử vị trí.</p>{:else}<div class="space-y-3">{#each spiritHistory as item (item.id)}<div class="rounded-md border border-[var(--color-border)] p-3"><div class="flex justify-between gap-3"><strong>{item.change_type === 'placed' ? 'Đã xếp vị trí' : item.change_type === 'moved' ? 'Đã chuyển vị trí' : item.change_type === 'unplaced' ? 'Đã gỡ khỏi vị trí' : 'Tạo hồ sơ'}</strong><span class="text-xs text-[var(--color-text-secondary)]">{new Date(item.changed_at).toLocaleString('vi-VN')}</span></div><p class="mt-1 text-sm text-[var(--color-text-secondary)]">{item.notes || 'Thay đổi vị trí/Bài vị'}</p></div>{/each}</div>{/if}
+</Popup>
 
 <Popup
 	open={importPopupOpen}
@@ -1961,13 +2057,15 @@
 		class="fixed inset-0 z-50 grid place-items-end bg-black/40 md:place-items-center"
 		role="presentation"
 		onclick={(e) => {
-			if (e.target === e.currentTarget) formOpen = false;
+			if (e.target === e.currentTarget) void requestCloseForm();
 		}}
 	>
 		<form
 			onsubmit={save}
+			oninput={markEditingFormChanged}
+			onchange={markEditingFormChanged}
 			class={[
-				'max-h-[94dvh] w-full overflow-y-auto rounded-t-xl bg-[var(--color-surface)] shadow-xl md:rounded-xl',
+				'h-[100dvh] w-full overflow-y-auto rounded-none bg-[var(--color-surface)] shadow-xl md:h-auto md:max-h-[94dvh] md:rounded-xl',
 				editing || singleSpiritEntry
 					? 'md:max-w-[800px]'
 					: relatedTabletId
@@ -1976,7 +2074,7 @@
 			]}
 		>
 			<header
-				class="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4"
+				class="sticky top-0 z-40 flex items-center justify-between border-b border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 md:px-5 md:py-4"
 			>
 				<h2 class="text-lg font-semibold">
 					{editing
@@ -1985,16 +2083,16 @@
 							? 'Thêm Hương linh vào bài vị'
 							: 'Thêm Hương linh'}
 				</h2>
-				<button
+				<div class="flex items-center gap-3">{#if editing}<button type="button" onclick={() => { if (editing) void showSpiritHistory(editing); }} class="text-sm font-semibold text-[var(--color-primary-dark)]">Lịch sử vị trí</button>{/if}<button
 					type="button"
-					onclick={() => (formOpen = false)}
+					onclick={() => void requestCloseForm()}
 					aria-label="Đóng"
 					class="icon-[lucide--x] h-5 w-5 cursor-pointer"
-				></button>
+				></button></div>
 			</header>
 			<div
 				class={[
-					'grid gap-4 p-5',
+				'grid gap-4 p-4 md:p-5',
 					relatedTabletId || singleSpiritEntry
 						? 'md:min-h-0 md:flex-1 md:grid-cols-1 md:overflow-y-auto'
 						: 'md:grid-cols-2'
@@ -2029,7 +2127,7 @@
 							? 'grid content-start gap-4 md:grid-cols-2'
 							: 'contents'}
 					>
-						{#if houses.length > 1}<label
+						{#if houses.length > 1 && !editing}<label
 								><span class="mb-1 block text-sm font-medium">Nhà Linh *</span><select
 									bind:value={formHouseId}
 									disabled={Boolean(editing) || Boolean(relatedTabletId)}
@@ -2165,7 +2263,7 @@
 									class="flex min-h-0 min-w-0 flex-col overflow-hidden rounded-md border border-[var(--color-border)] md:col-span-2"
 								>
 									<header
-										class="flex items-center justify-between gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2"
+										class="flex flex-col items-stretch gap-3 border-b border-[var(--color-border)] bg-[var(--color-surface-muted)] px-3 py-2 sm:flex-row sm:items-center sm:justify-between"
 									>
 										<div class="min-w-0">
 											<h3 class="truncate text-sm font-semibold">
@@ -2178,7 +2276,7 @@
 										{#if canWrite}<button
 												type="button"
 												onclick={addRelatedSpirit}
-												class="h-9 shrink-0 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)]"
+												class="h-10 shrink-0 rounded-md border border-[var(--color-primary)] px-3 text-xs font-semibold text-[var(--color-primary-dark)] sm:h-9"
 											>+ Thêm Hương Linh khác</button
 											>{/if}
 									</header>
@@ -2188,7 +2286,56 @@
 												<LoadingIndicator label="Đang tải Hương linh cùng bài vị..." />
 											</div>
 										{:else}
-											<table class="w-full table-auto text-left text-sm">
+											<div class="divide-y divide-[var(--color-border)] md:hidden">
+												{#each relatedSpirits as related (related.id)}
+													<article
+														class={[
+															'p-3',
+															related.id === editing?.id ? 'bg-[var(--color-primary-soft)]' : ''
+														]}
+													>
+														<div class="flex items-start gap-3">
+															{#if related.image_url}<img
+																src={related.image_url}
+																alt={`Ảnh ${related.full_name}`}
+																class="h-12 w-10 shrink-0 border border-[#6f4b3b] object-cover"
+															/>{:else}<span
+																class="grid h-12 w-10 shrink-0 place-items-center border border-[#6f4b3b] text-[#6f4b3b]/50"
+																><span class="icon-[lucide--user-round] h-4 w-4" aria-hidden="true"></span></span
+															>{/if}
+															<div class="min-w-0 flex-1">
+																<p class="truncate font-semibold">{related.full_name}</p>
+																<p class="text-sm text-[var(--color-text-secondary)]">
+																	{related.dharma_name || 'Chưa có pháp danh'}
+																</p>
+															</div>
+														</div>
+														<div class="mt-3 grid grid-cols-2 gap-x-3 gap-y-1 text-xs text-[var(--color-text-secondary)]">
+															<span>Năm sinh: {related.birth_year || '—'}</span>
+															<span>Năm mất: {related.death_year || '—'}</span>
+															<span>Tuổi: {related.age || '—'}</span>
+															<span>Tháng gửi: {related.sent_month || '—'}</span>
+															<span class="col-span-2">Nơi an táng: {related.burial_place || '—'}</span>
+														</div>
+														{#if canWrite}<div class="mt-3 grid grid-cols-2 gap-2">
+															<button
+																type="button"
+																onclick={() => selectRelatedSpirit(related)}
+																class="h-10 rounded-md border border-[var(--color-primary)] text-sm font-semibold text-[var(--color-primary-dark)]"
+															>Chỉnh sửa</button
+															>
+															<button
+																type="button"
+																disabled={relatedSpirits.length <= 1}
+																onclick={() => void removeRelatedSpirit(related)}
+																class="h-10 rounded-md border border-[var(--color-danger)] text-sm font-semibold text-[var(--color-danger)] disabled:cursor-not-allowed disabled:opacity-40"
+															>Xóa</button
+															>
+														</div>{/if}
+													</article>
+												{/each}
+											</div>
+											<table class="hidden w-full table-auto text-left text-sm md:table">
 												<thead
 													class="bg-[var(--color-surface)] text-xs text-[var(--color-text-secondary)]"
 												>
@@ -2313,7 +2460,7 @@
 								>
 									<div class="min-w-0">
 										<h3 class="truncate text-sm font-semibold">
-											Hương linh cùng bài vị: {newTabletForm.name || form.full_name || 'Bài vị mới'}
+											Hương linh cùng bài vị: {newTabletForm.name || newSpirits[0]?.full_name || 'Bài vị mới'}
 										</h3>
 										<p class="text-xs text-[var(--color-text-secondary)]">
 											Hương linh đầu tiên sẽ được tạo cùng Bài vị này.
@@ -2338,33 +2485,24 @@
 											</tr>
 										</thead>
 										<tbody class="divide-y divide-[var(--color-border)]">
-											<tr class="bg-[var(--color-primary-soft)]">
+											{#each newSpirits as spirit, index (index)}<tr class="bg-[var(--color-primary-soft)]">
 												<td class="px-1 py-2">
 													<div class="flex justify-center gap-1">
 														<button
 															type="button"
-															onclick={() => (spiritEditorVisible = true)}
-															class="grid h-7 w-7 place-items-center rounded border border-[var(--color-primary)] text-[var(--color-primary-dark)]"
-															aria-label="Chỉnh sửa Hương linh mới"
-															title="Chỉnh sửa Hương linh mới"
-															><span class="icon-[lucide--pencil] h-3.5 w-3.5" aria-hidden="true"
-															></span></button
-														>
-														<button
-															type="button"
-															disabled
-															class="grid h-7 w-7 cursor-not-allowed place-items-center rounded border border-[var(--color-danger)] text-[var(--color-danger)] opacity-40"
-															aria-label="Không thể xóa Hương linh duy nhất"
-															title="Bài vị cần tối thiểu một Hương linh"
+															onclick={() => removeNewTabletSpirit(index)}
+															class="grid h-7 w-7 place-items-center rounded border border-[var(--color-danger)] text-[var(--color-danger)]"
+															aria-label={`Xóa ${spirit.full_name}`}
+															title={`Xóa ${spirit.full_name}`}
 															><span class="icon-[lucide--trash-2] h-3.5 w-3.5" aria-hidden="true"
 															></span></button
 														>
 													</div>
 												</td>
 												<td class="px-1 py-2">
-													{#if form.image_url}<img
-															src={form.image_url}
-															alt={`Ảnh ${form.full_name}`}
+													{#if spirit.image_url}<img
+															src={spirit.image_url}
+															alt={`Ảnh ${spirit.full_name}`}
 															class="h-9 w-7 border border-[#6f4b3b] object-cover"
 														/>{:else}<span
 															class="grid h-9 w-7 place-items-center border border-[#6f4b3b] text-[#6f4b3b]/50"
@@ -2372,14 +2510,14 @@
 															></span></span
 														>{/if}
 												</td>
-												<td class="px-1 py-2 font-medium">{form.full_name || '—'}</td>
-												<td class="px-1 py-2">{form.dharma_name || '—'}</td>
-												<td class="px-1 py-2">{form.birth_year || '—'}</td>
-												<td class="px-1 py-2">{form.death_year || '—'}</td>
-												<td class="px-1 py-2">{form.age || '—'}</td>
-												<td class="px-1 py-2">{form.sent_month || '—'}</td>
-												<td class="px-1 py-2">{form.burial_place || '—'}</td>
-											</tr>
+												<td class="px-1 py-2 font-medium">{spirit.full_name || '—'}</td>
+												<td class="px-1 py-2">{spirit.dharma_name || '—'}</td>
+												<td class="px-1 py-2">{spirit.birth_year || '—'}</td>
+												<td class="px-1 py-2">{spirit.death_year || '—'}</td>
+												<td class="px-1 py-2">{spirit.age || '—'}</td>
+												<td class="px-1 py-2">{spirit.sent_month || '—'}</td>
+												<td class="px-1 py-2">{spirit.burial_place || '—'}</td>
+											</tr>{/each}
 										</tbody>
 									</table>
 								</div>
@@ -2416,6 +2554,36 @@
 											false,
 											addingRelatedSpirit ? relatedSpiritForm : form
 										)}{@render field(
+											'Tên thường gọi',
+											'familiar_name',
+											false,
+											addingRelatedSpirit ? relatedSpiritForm : form
+										)}{@render field(
+											'Giới tính',
+											'gender',
+											false,
+											addingRelatedSpirit ? relatedSpiritForm : form
+										)}{@render field(
+											'Ngày sinh (dương)',
+											'birth_date',
+											false,
+											addingRelatedSpirit ? relatedSpiritForm : form
+										)}{@render field(
+											'Ngày mất (dương)',
+											'death_date',
+											false,
+											addingRelatedSpirit ? relatedSpiritForm : form
+										)}{@render field(
+											'Ngày sinh (âm)',
+											'birth_lunar',
+											false,
+											addingRelatedSpirit ? relatedSpiritForm : form
+										)}{@render field(
+											'Ngày mất (âm)',
+											'death_lunar',
+											false,
+											addingRelatedSpirit ? relatedSpiritForm : form
+										)}{@render field(
 											'Năm sinh',
 											'birth_year',
 											false,
@@ -2430,14 +2598,37 @@
 											'sent_month',
 											false,
 											addingRelatedSpirit ? relatedSpiritForm : form
-										)}{@render field('Nơi an táng', 'burial_place', false, addingRelatedSpirit ? relatedSpiritForm : form)}
-										{#if addingRelatedSpirit}<div class="flex justify-end md:col-span-2">
+										)}{@render field('Nơi an táng', 'burial_place', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Ngày đưa vào khu thờ', 'entered_worship_area_at', false, addingRelatedSpirit ? relatedSpiritForm : form)}{@render field('Ngày an vị', 'enshrined_at', false, addingRelatedSpirit ? relatedSpiritForm : form)}
+										<label><span class="mb-1 block text-sm font-medium">Tình trạng</span><select value={(addingRelatedSpirit ? relatedSpiritForm : form).status} onchange={(event) => { if (addingRelatedSpirit) relatedSpiritForm.status = event.currentTarget.value; else form.status = event.currentTarget.value; }} class="h-11 w-full rounded-md border-[var(--color-border-strong)]"><option value="draft">Nháp</option><option value="worshipping">Đang thờ</option><option value="enshrined">Đã an vị</option><option value="moved">Đã chuyển</option><option value="dedicated">Đã hồi hướng</option><option value="archived">Đã lưu trữ</option></select></label>
+										<label class="flex h-11 items-center gap-2 rounded-md border border-[var(--color-border-strong)] px-3 text-sm md:col-span-2">
+											<input
+												type="checkbox"
+												checked={(addingRelatedSpirit ? relatedSpiritForm : form).has_urn}
+												onchange={(event) => {
+													if (addingRelatedSpirit) relatedSpiritForm.has_urn = event.currentTarget.checked;
+													else form.has_urn = event.currentTarget.checked;
+												}}
+												class="h-4 w-4 rounded border-[var(--color-border-strong)] text-[var(--color-primary)]"
+											/>
+											<span>Có Hũ Cốt</span>
+										</label>
+										{#if addingRelatedSpirit || (singleSpiritEntry && creatingTablet)}<div class="flex justify-end md:col-span-2">
 											<button
 												type="button"
-												onclick={() => void updateRelatedSpiritList()}
+												onclick={() =>
+													addingRelatedSpirit ? void updateRelatedSpiritList() : addSpiritToNewTablet()}
 												disabled={saving || imageUploading}
-												class="h-10 rounded-md bg-[var(--color-primary)] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
-											>Кập nhập</button
+												class="h-11 w-full rounded-md bg-[var(--color-primary)] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:w-auto"
+											>Thêm vào danh sách</button
+											>
+										</div>{/if}
+										{#if editing && selectedFormTablet && !addingRelatedSpirit}<div class="flex justify-end md:col-span-2">
+											<button
+												type="button"
+												onclick={updateEditedSpiritInRelatedList}
+												disabled={saving || imageUploading}
+												class="h-11 w-full rounded-md bg-[var(--color-primary)] px-5 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:w-auto"
+											>Cập nhập vào danh sách</button
 											>
 										</div>{/if}
 									</div>
@@ -2461,12 +2652,12 @@
 				</div>
 			</div>
 			<footer
-				class="sticky bottom-0 z-40 flex justify-end gap-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-5 py-4"
+				class="sticky bottom-0 z-40 flex gap-3 border-t border-[var(--color-border)] bg-[var(--color-surface)] px-4 py-3 md:justify-end md:px-5 md:py-4"
 			>
 				<button
 					type="button"
-					onclick={() => (formOpen = false)}
-					class="h-11 cursor-pointer rounded-md border border-[var(--color-border-strong)] px-5 text-sm font-semibold"
+					onclick={() => void requestCloseForm()}
+					class="h-11 flex-1 cursor-pointer rounded-md border border-[var(--color-border-strong)] px-5 text-sm font-semibold md:flex-none"
 					>Huỷ</button
 				>{#if !editing && !singleSpiritEntry && !relatedTabletId && selectedFormPosition && form.tablet_id}<button
 						type="submit"
@@ -2490,17 +2681,19 @@
 						(quickCreateTablet = Boolean(
 							!editing && !singleSpiritEntry && selectedFormPosition && !form.tablet_id
 						))}
-					class="h-11 cursor-pointer rounded-md bg-[var(--color-primary)] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50"
+					class="h-11 flex-1 cursor-pointer rounded-md bg-[var(--color-primary)] px-6 text-sm font-semibold text-white disabled:cursor-not-allowed disabled:opacity-50 md:flex-none"
 					>{saving
 						? 'Đang lưu...'
 						: editing
-							? 'Lưu'
+							? selectedFormTablet
+								? 'Lưu Bài vị'
+								: 'Lưu'
 							: singleSpiritEntry
 								? selectedFormPosition && !form.tablet_id
-									? 'Tạo Bài vị & thêm Hương linh'
-									: 'Thêm Hương linh'
+									? 'Lưu Bài vị'
+									: 'Lưu'
 								: relatedTabletId
-									? 'Thêm Hương linh'
+									? 'Lưu'
 									: !editing && selectedFormPosition && !form.tablet_id
 										? 'Tạo bài vị & thêm'
 										: !editing && !selectedFormPosition
@@ -2513,6 +2706,7 @@
 
 {#snippet field(label: string, key: keyof SpiritInput, required = false, spirit: SpiritInput = form)}<label
 		><span class="mb-1 block text-sm font-medium">{label}</span><input
+			type={key === 'birth_date' || key === 'death_date' || key === 'entered_worship_area_at' || key === 'enshrined_at' ? 'date' : 'text'}
 			bind:value={spirit[key]}
 			{required}
 			class="h-11 w-full rounded-md border-[var(--color-border-strong)]"
@@ -2525,7 +2719,7 @@
 			>{:else}{segment.text}{/if}
 	{/each}{/snippet}
 
-{#snippet spiritCardGroups()}<div class="space-y-4">
+{#snippet spiritCardGroups()}<div class="grid grid-cols-1 gap-4 md:grid-cols-2 2xl:grid-cols-3">
 		{#each tableSpiritGroups as group (group.key)}<section
 				class="overflow-hidden rounded-lg border border-[var(--color-border)] bg-[var(--color-surface-muted)]/35"
 			>
@@ -2559,14 +2753,14 @@
 					</div>
 				</div>
 				<div class="overflow-x-auto">
-					<table class="w-full min-w-[560px] text-left text-sm">
+					<table class="w-full min-w-[360px] text-left text-xs">
 						<thead class="text-xs text-[var(--color-text-secondary)]"
 							><tr
-								>{#if canWrite}<th class="w-10 px-4 py-2"><span class="sr-only">Chọn</span></th
-									>{/if}<th class="px-4 py-2 font-medium">Họ tên</th><th
-									class="px-4 py-2 font-medium">Pháp danh</th
-								><th class="px-4 py-2 font-medium">Năm sinh</th><th class="px-4 py-2 font-medium"
-									>Năm mất</th
+								>{#if canWrite}<th class="hidden w-0 p-0"><span class="sr-only">Chọn</span></th
+									>{/if}<th class="px-2 py-2 font-medium">Họ tên</th><th
+									class="px-2 py-2 font-medium">Pháp danh</th
+								><th class="px-2 py-2 font-medium">Sinh</th><th class="px-2 py-2 font-medium"
+									>Mất</th
 								>{#if canWrite}<th class="w-16 px-4 py-2"><span class="sr-only">Sửa</span></th
 									>{/if}</tr
 							></thead
@@ -2577,7 +2771,7 @@
 										canWrite && 'cursor-pointer hover:bg-[var(--color-primary-soft)]/45'
 									]}
 									onclick={() => canWrite && void edit(item)}
-									>{#if canWrite}<td class="px-4 py-2"
+									>{#if canWrite}<td class="hidden w-0 p-0"
 											><input
 												type="checkbox"
 												checked={selectedSpiritIDs.has(item.id)}
@@ -2679,7 +2873,7 @@
 			style={`width: ${tableWidth}px; min-width: ${tableWidth}px;`}
 		>
 			<colgroup>
-				{#if canWrite}<col style="width: 96px;" />{/if}
+				{#if canWrite}<col style="width: 72px;" />{/if}
 				{#each tableSpiritColumns as column (column.key)}<col
 						style={`width: ${columnWidth(column)}px;`}
 					/>{/each}
@@ -2687,13 +2881,13 @@
 			<thead class="bg-[var(--color-surface-muted)] text-[var(--color-text-secondary)]">
 				<tr>
 					{#if canWrite}<th
-							class="sticky top-0 z-10 w-24 bg-[var(--color-surface-muted)] px-3 py-3 text-right font-semibold"
+							class="sticky top-0 z-10 w-18 bg-[var(--color-surface-muted)] px-2 py-2 text-right font-semibold"
 							>Thao tác</th
 						>{/if}
 					{#each tableSpiritColumns as column (column.key)}<th
-							class="relative sticky top-0 z-10 bg-[var(--color-surface-muted)] px-3 py-3"
+							class="relative sticky top-0 z-10 bg-[var(--color-surface-muted)] px-2 py-2"
 						>
-							{@render spiritSortHeader(column.label, column.key)}<button
+							{#if spiritSortKeys.has(column.key)}{@render spiritSortHeader(column.label, column.key)}{:else}<span class="block truncate font-semibold">{column.label}</span>{/if}<button
 								type="button"
 								onpointerdown={(event) => beginColumnResize(event, column)}
 								onclick={(event) => event.stopPropagation()}
@@ -2770,6 +2964,9 @@
 													><span class="icon-[lucide--user-round] h-5 w-5" aria-hidden="true"
 													></span></span
 												>{/if}
+										{:else if column.key === 'has_urn'}<span class="block text-center font-medium">
+											{item.has_urn ? 'Có' : 'Không'}
+										</span>
 										{:else if column.key === 'created_at' || column.key === 'updated_at'}<span
 												class="block w-full truncate whitespace-nowrap"
 												>{@render highlight(formatTimestamp(item[column.key]))}</span

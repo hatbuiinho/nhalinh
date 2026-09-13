@@ -364,7 +364,14 @@
 										{position.name}
 									</strong>
 								{/if}
-								{#if showSummary && !(showSpiritNames && visibleSpiritNames.length > 0)}
+								{#if showSummary && position.tablet_count === 0}
+									<span
+										class="block leading-tight font-semibold opacity-80"
+										style={`margin-top: ${showPositionLabel ? titleGap : 0}px; font-size: ${metricFontSize}px;`}
+									>
+										+ Tạo bài vị
+									</span>
+								{:else if showSummary && !(showSpiritNames && visibleSpiritNames.length > 0)}
 									<span
 										class="block leading-tight opacity-80"
 										style={`margin-top: ${showPositionLabel ? titleGap : 0}px; font-size: ${metricFontSize}px;`}
@@ -397,10 +404,10 @@
 								onclick={() => onemptyposition({ rowNumber: row, columnNumber: column })}
 								class="grid w-full place-items-center rounded-[inherit] bg-[color-mix(in_srgb,var(--color-surface)_94%,var(--color-primary)_6%)] text-center font-semibold text-[var(--color-primary-dark)] transition hover:bg-[var(--color-primary-soft)]"
 								style={`height: ${cellHeight}px; font-size: ${metricFontSize}px;`}
-								aria-label={`Tạo bài vị tại vị trí ${column}${areaCode}-${row}`}
-								title={`Tạo bài vị tại ${column}${areaCode}-${row}`}
+								aria-label={`Thêm vị trí ${column}${areaCode}-${row}`}
+								title={`Thêm vị trí ${column}${areaCode}-${row}`}
 							>
-								{#if zoom >= 0.5}<span>+ Tạo bài vị</span>{/if}
+								{#if zoom >= 0.5}<span>+ Thêm vị trí</span>{/if}
 							</button>
 						{:else}
 							<div

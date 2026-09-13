@@ -43,4 +43,12 @@ type Store interface {
 	HouseIDForTablet(context.Context, string) (string, error)
 	HouseIDForSpirit(context.Context, string) (string, error)
 	HouseIDsForSpirits(context.Context, []string) (map[string]string, error)
+	ListUrns(context.Context, Actor) ([]Urn, error)
+	GetUrn(context.Context, Actor, string) (Urn, error)
+	CreateUrn(context.Context, Urn) (Urn, error)
+	UpdateUrn(context.Context, Urn) (Urn, error)
+	DeleteUrn(context.Context, string) error
+	ListUrnHistory(context.Context, string) ([]UrnHistory, error)
+	CreateUrnHistory(context.Context, UrnHistory) error
+	ListSpiritPositionHistory(context.Context, string) ([]SpiritPositionHistory, error)
 }

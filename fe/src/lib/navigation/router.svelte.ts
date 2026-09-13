@@ -62,6 +62,7 @@ class AppRouter {
 	openMain(name: MainRouteName) {
 		const paths: Record<MainRouteName, string> = {
 			memorial: '/memorial',
+			urns: '/urns',
 			structure: '/structure',
 			statistics: '/statistics',
 			users: '/users'
