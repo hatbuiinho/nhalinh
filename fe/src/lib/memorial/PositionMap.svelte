@@ -424,6 +424,7 @@
 									deathYear={position.single_spirit_death_year}
 									status={position.tablet_statuses[0] ?? 'enshrined'}
 									fontSize={metricFontSize}
+									maxNameWords={4}
 								/>{:else if showPositionLabel}
 									<strong class="m-2 text-left" style={`font-size: ${titleFontSize}px;`}>{position.name}</strong>
 									{#if showSummary}<span class="m-2 mt-0 text-left leading-tight font-semibold opacity-80" style={`font-size: ${metricFontSize}px;`}>+ Tạo bài vị</span>{/if}

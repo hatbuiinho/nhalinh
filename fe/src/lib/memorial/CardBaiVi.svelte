@@ -12,7 +12,8 @@
 		deathYear = '',
 		status = 'enshrined',
 		fontSize = 9,
-		codeScale = 1
+		codeScale = 1,
+		maxNameWords = 0
 	}: {
 		code: string;
 		tabletType?: TabletType;
@@ -24,6 +25,7 @@
 		status?: TabletStatus;
 		fontSize?: number;
 		codeScale?: number;
+		maxNameWords?: number;
 	} = $props();
 
 	let imageFailed = $state(false);
@@ -35,10 +37,17 @@
 	let visibleSpiritLimit = $derived(fontSize >= 13 ? (imageUrl && !imageFailed ? 3 : 4) : 2);
 	let representativeNames = $derived(spiritNames.slice(0, visibleSpiritLimit));
 	let remaining = $derived(Math.max(0, spiritCount - representativeNames.length));
-	let singleNameWords = $derived((spiritNames[0] ?? '').trim().split(/\s+/).filter(Boolean));
+	let rawSingleNameWords = $derived((spiritNames[0] ?? '').trim().split(/\s+/).filter(Boolean));
+	let singleNameWords = $derived(maxNameWords > 0 ? rawSingleNameWords.slice(0, maxNameWords) : rawSingleNameWords);
+	let singleNameTruncated = $derived(maxNameWords > 0 && rawSingleNameWords.length > maxNameWords);
 	let years = $derived(birthYear && deathYear ? `${birthYear} – ${deathYear}` : birthYear || deathYear || '');
 	let tone = $derived(['gold', 'rose', 'jade', 'sky'][Array.from(code).reduce((sum, char) => sum + char.charCodeAt(0), 0) % 4]);
 	function label() { return tabletType === 'ancestral' ? 'CỬU HUYỀN THẤT TỔ' : tabletType === 'family' ? 'GIA TIÊN' : 'HƯƠNG LINH'; }
+	function visibleName(name: string) {
+		const words = name.trim().split(/\s+/).filter(Boolean);
+		if (!maxNameWords || words.length <= maxNameWords) return name;
+		return `${words.slice(0, maxNameWords).join(' ')}…`;
+	}
 </script>
 
 <div class={`tablet-card ${tone}`} class:single={variant === 'single'} class:multiple={variant === 'multiple'} class:cuu-huyen={variant === 'cuu-huyen'} style={`font-size:${fontSize}px;--code-scale:${codeScale}`}>
@@ -50,10 +59,10 @@
 		{/if}
 		<p class="type">{label()}</p>
 		{#if variant === 'single'}
-			<p class="single-name" title={spiritNames[0] ?? ''}>{#each singleNameWords as word}<span>{word}</span>{/each}</p>
+			<p class="single-name" title={spiritNames[0] ?? ''}>{#each singleNameWords as word, index}<span>{word}{#if singleNameTruncated && index === singleNameWords.length - 1}…{/if}</span>{/each}</p>
 			{#if years}<p class="years">{years}</p>{/if}
 		{:else}
-			<div class="names">{#each representativeNames as name}<p title={name}>{name}</p>{/each}</div>
+			<div class="names">{#each representativeNames as name}<p title={name}>{visibleName(name)}</p>{/each}</div>
 			{#if remaining > 0}<p class="more">+{remaining} HL</p>{/if}
 		{/if}
 	</div>

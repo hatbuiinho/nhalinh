@@ -94,3 +94,5 @@ https://svelte.dev/e/expected_token
 3:37:13 PM [vite] (client) [console.warn] The next HMR update will cause the page to reload
 3:37:13 PM [vite] (client) [console.error] TypeError: Failed to fetch dynamically imported module: http://127.0.0.1:5173/.svelte-kit/generated/client/nodes/3.js?t=1789288632578
 3:37:39 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+4:19:56 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.
+4:25:10 PM [vite] (client) [console.warn] Avoid using `history.pushState(...)` and `history.replaceState(...)` as these will conflict with SvelteKit's router. Use the `pushState` and `replaceState` imports from `$app/navigation` instead.

@@ -2763,12 +2763,12 @@
 			>{:else}{segment.text}{/if}
 	{/each}{/snippet}
 
-{#snippet tabletCardGrid()}<div class="grid grid-cols-[repeat(auto-fill,minmax(80px,1fr))] gap-2.5 p-1 sm:grid-cols-[repeat(auto-fill,80px)]">
+{#snippet tabletCardGrid()}<div class="grid grid-cols-[repeat(auto-fill,minmax(150px,1fr))] gap-4 p-1 sm:grid-cols-[repeat(auto-fill,150px)]">
 		{#each tableSpiritGroups as group (group.key)}{@const first = group.items[0]}<button
 				type="button"
 				onclick={() => canWrite && void edit(first)}
 				disabled={!canWrite}
-				class="h-[80px] text-left enabled:cursor-pointer disabled:cursor-default"
+				class="h-[220px] text-left enabled:cursor-pointer disabled:cursor-default"
 				title={group.hasTablet ? `Mở Bài vị ${first.tablet_name}` : 'Hương linh chưa xếp Bài vị'}
 			><CardBaiVi
 					code={first.position_name || 'Chưa xếp'}
@@ -2778,7 +2778,7 @@
 					birthYear={first.birth_year}
 					deathYear={first.death_year}
 					status={first.status === 'draft' ? 'pending' : 'enshrined'}
-					fontSize={9}
+					fontSize={16}
 				/></button>
 		{/each}
 	</div>{/snippet}
